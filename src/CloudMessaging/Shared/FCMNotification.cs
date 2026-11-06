@@ -28,13 +28,8 @@ namespace Plugin.Firebase.CloudMessaging
             string body = null,
             string title = null,
             string imageUrl = null,
-<<<<<<< HEAD
-            
-            IDictionary<string, string> data = null)
-=======
             IDictionary<string, string> data = null
         )
->>>>>>> 47bb62628259049bd4344688053114b9118c0de9
         {
             _body = body;
             _title = title;
@@ -55,17 +50,19 @@ namespace Plugin.Firebase.CloudMessaging
         public string Body =>
             _body ?? (Data != null && Data.ContainsKey("body") ? Data["body"] : "");
 
-<<<<<<< HEAD
-        public string Body => _body ?? (Data != null && Data.ContainsKey("body") ? Data["body"] : "");
-        public string Title => _title ?? (Data != null && Data.ContainsKey("title") ? Data["title"] : "");
-        public bool IsSilentInForeground => Data != null && Data.ContainsKey("is_silent_in_foreground") && bool.TryParse(Data["is_silent_in_foreground"], out var value) && value;
-        public string ActionKey => Data != null && Data.ContainsKey("click_action")  ? Data["click_action"] : "";
-=======
         /// <summary>
         /// Gets the notification title.
         /// </summary>
         public string Title =>
             _title ?? (Data != null && Data.ContainsKey("title") ? Data["title"] : "");
+
+        /// <summary>
+        /// Gets the click action from the data payload (data key <c>click_action</c>).
+        /// Used on Android to look up the registered <see cref="NotificationUserCategory"/>
+        /// whose action buttons are attached to the local notification.
+        /// </summary>
+        public string ActionKey =>
+            Data != null && Data.ContainsKey("click_action") ? Data["click_action"] : "";
 
         /// <summary>
         /// Gets whether the notification should be silent in the foreground.
@@ -77,9 +74,18 @@ namespace Plugin.Firebase.CloudMessaging
             && value;
 
         /// <summary>
+        /// Gets whether this notification is silent (data key <c>silent</c> = "true"/"1").
+        /// A silent notification generates no local notification / banner, the
+        /// <see cref="IFirebaseCloudMessaging.NotificationReceived"/> event still fires.
+        /// </summary>
+        public bool IsSilent =>
+            Data != null
+            && Data.ContainsKey("silent")
+            && (Data["silent"] == "true" || Data["silent"] == "1");
+
+        /// <summary>
         /// Gets the URL of an image to display in the notification.
         /// </summary>
->>>>>>> 47bb62628259049bd4344688053114b9118c0de9
         public string ImageUrl { get; }
 
 #nullable enable

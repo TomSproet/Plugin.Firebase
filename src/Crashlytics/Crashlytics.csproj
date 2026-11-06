@@ -41,16 +41,13 @@
 
         <!--Version of C# to use -->
         <LangVersion>default</LangVersion>
-<<<<<<< HEAD
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-=======
         <XamarinFirebaseCrashlyticsVersion Condition="'$(XamarinFirebaseCrashlyticsVersion)' == ''">119.0.0</XamarinFirebaseCrashlyticsVersion>
         <XamarinAndroidXDataStoreVersion Condition="'$(XamarinAndroidXDataStoreVersion)' == ''">1.1.1.8</XamarinAndroidXDataStoreVersion>
     </PropertyGroup>
-    
+
     <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
         <FirebaseCrashlyticsUploadSymbolsEnabled>false</FirebaseCrashlyticsUploadSymbolsEnabled>
->>>>>>> 47bb62628259049bd4344688053114b9118c0de9
     </PropertyGroup>
 
     <!-- Define what happens on build and release -->

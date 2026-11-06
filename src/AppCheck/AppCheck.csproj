@@ -43,11 +43,9 @@
 
         <!--Version of C# to use -->
         <LangVersion>default</LangVersion>
-<<<<<<< HEAD:src/DynamicLinks/DynamicLinks.csproj
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-=======
 
->>>>>>> 47bb62628259049bd4344688053114b9118c0de9:src/AppCheck/AppCheck.csproj
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+
     </PropertyGroup>
 
     <!-- Define what happens on build and release -->
