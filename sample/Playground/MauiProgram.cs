@@ -67,17 +67,6 @@ public static class MauiProgram
     {
         builder.ConfigureLifecycleEvents(events => {
 #if IOS
-<<<<<<< HEAD
-            events.AddiOS(iOS => iOS.FinishedLaunching((app, launchOptions) => {
-                CrossFirebase.Initialize(CreateCrossFirebaseSettings());
-                FirebaseAuthFacebookImplementation.Initialize(app, launchOptions, "151743924915235", "Plugin Firebase Playground");
-                return false;
-            }));
-#else
-            events.AddAndroid(android => android.OnCreate((activity, _) =>
-                CrossFirebase.Initialize(activity, CreateCrossFirebaseSettings())));
-                
-=======
             events.AddiOS(iOS =>
                 iOS.WillFinishLaunching(
                     (app, launchOptions) =>
@@ -98,7 +87,6 @@ public static class MauiProgram
                     }
                 )
             );
->>>>>>> 47bb62628259049bd4344688053114b9118c0de9
 #endif
         });
 
@@ -139,18 +127,6 @@ public static class MauiProgram
 
     private static AppCheckOptions GetConfiguredAppCheckOptions()
     {
-<<<<<<< HEAD
-        return new CrossFirebaseSettings(
-            isAnalyticsEnabled: true,
-            isAuthEnabled: true,
-            isCloudMessagingEnabled: true,
-            isDynamicLinksEnabled: true,
-            isFirestoreEnabled: true,
-            isFunctionsEnabled: true,
-            isRemoteConfigEnabled: true,
-            isStorageEnabled: true,
-            googleRequestIdToken: "864165578426-g0taorcj9ff8rhgiuc3cuh83nlhjvnap.apps.googleusercontent.com");
-=======
         var modeString = Preferences.Get(PreferenceKeys.AppCheckMode, "Debug");
         return modeString switch {
             "Disabled" => AppCheckOptions.Disabled,
@@ -163,6 +139,5 @@ public static class MauiProgram
             // Default to Debug, also for a saved mode this platform doesn't support.
             _ => AppCheckOptions.Debug
         };
->>>>>>> 47bb62628259049bd4344688053114b9118c0de9
     }
 }
