@@ -14,15 +14,28 @@ namespace Plugin.Firebase.CloudMessaging;
 
 public sealed class FirebaseCloudMessagingImplementation : DisposableBase, IFirebaseCloudMessaging
 {
+<<<<<<< HEAD
     private const string IntentKeyFCMNotification = "intent_key_fcm_notification";
     public static Type NotificationActivityType { get; set; }
     public static string ActionIdentifierKey = "action_identifier";
     private static Context _context;
     private static IList<NotificationUserCategory> userNotificationCategories = new List<NotificationUserCategory>();
+=======
+    private static Context _context;
+
+    public static string IntentKeyFCMNotification { get; set; } = "intent_key_fcm_notification";
+>>>>>>> 47bb62628259049bd4344688053114b9118c0de9
     public static string ChannelId { get; set; }
-    public static int SmallIconRef { private get; set; } = global::Android.Resource.Drawable.SymDefAppIcon;
+    public static int SmallIconRef { private get; set; } = Android.Resource.Drawable.SymDefAppIcon;
     public static Func<FCMNotification, NotificationCompat.Builder> NotificationBuilderProvider { private get; set; }
+<<<<<<< HEAD
     public static ActivityFlags? NotificationActivityFlags { get; set; } = ActivityFlags.ClearTop | ActivityFlags.SingleTop;
+=======
+#nullable enable
+    public static Action<FCMNotification>? ShowLocalNotificationAction { private get; set; }
+#nullable restore
+
+>>>>>>> 47bb62628259049bd4344688053114b9118c0de9
     private FCMNotification _missedTappedNotification;
 
     public FirebaseCloudMessagingImplementation()
@@ -70,7 +83,12 @@ public sealed class FirebaseCloudMessagingImplementation : DisposableBase, IFire
     private static void HandleShowLocalNotificationIfNeeded(FCMNotification fcmNotification)
     {
         if(!fcmNotification.IsSilentInForeground) {
-            HandleShowLocalNotification(fcmNotification);
+            var showLocalNotificationAction = ShowLocalNotificationAction;
+            if(showLocalNotificationAction == null) {
+                HandleShowLocalNotification(fcmNotification);
+            } else {
+                showLocalNotificationAction(fcmNotification);
+            }
         }
     }
     public static void ClearUserNotificationCategories()

@@ -1,46 +1,82 @@
-using Plugin.Firebase.Core;
+#nullable enable
+
 using Plugin.Firebase.Analytics.Platforms.iOS.Extensions;
+using Plugin.Firebase.Core;
 using FirebaseAnalytics = Firebase.Analytics.Analytics;
 
 namespace Plugin.Firebase.Analytics;
 
+/// <summary>
+/// iOS implementation of Firebase Analytics that wraps the native Firebase Analytics SDK.
+/// </summary>
 public sealed class FirebaseAnalyticsImplementation : DisposableBase, IFirebaseAnalytics
 {
-    public Task<string> GetAppInstanceIdAsync()
+    /// <inheritdoc/>
+    public Task<string?> GetAppInstanceIdAsync()
     {
         return Task.FromResult(FirebaseAnalytics.AppInstanceId);
     }
 
-    public void LogEvent(string eventName, IDictionary<string, object> parameters)
+    /// <inheritdoc/>
+    public void LogEvent(string eventName, IDictionary<string, object>? parameters)
     {
         FirebaseAnalytics.LogEvent(eventName, parameters?.ToNSDictionary());
     }
 
-    public void LogEvent(string eventName, params (string parameterName, object parameterValue)[] parameters)
+    /// <inheritdoc/>
+    public void LogEvent(
+        string eventName,
+        params (string parameterName, object parameterValue)[]? parameters
+    )
     {
         LogEvent(eventName, parameters?.ToDictionary(x => x.parameterName, x => x.parameterValue));
     }
 
-    public void SetUserId(string id)
+    /// <inheritdoc/>
+    public void SetDefaultEventParameters(IDictionary<string, object>? parameters)
+    {
+        FirebaseAnalytics.SetDefaultEventParameters(parameters?.ToNSDictionary());
+    }
+
+    /// <inheritdoc/>
+    public void SetDefaultEventParameters(
+        params (string parameterName, object parameterValue)[]? parameters
+    )
+    {
+        SetDefaultEventParameters(parameters?.ToDictionary(x => x.parameterName, x => x.parameterValue));
+    }
+
+    /// <inheritdoc/>
+    public void SetConsent(IDictionary<ConsentType, ConsentStatus> consentSettings)
+    {
+        FirebaseAnalytics.SetConsent(consentSettings.ToNativeConsentSettings());
+    }
+
+    /// <inheritdoc/>
+    public void SetUserId(string? id)
     {
         FirebaseAnalytics.SetUserId(id);
     }
 
-    public void SetUserProperty(string name, string value)
+    /// <inheritdoc/>
+    public void SetUserProperty(string name, string? value)
     {
         FirebaseAnalytics.SetUserProperty(value, name);
     }
 
+    /// <inheritdoc/>
     public void SetSessionTimoutDuration(TimeSpan duration)
     {
         FirebaseAnalytics.SetSessionTimeoutInterval(duration.TotalSeconds);
     }
 
+    /// <inheritdoc/>
     public void ResetAnalyticsData()
     {
         FirebaseAnalytics.ResetAnalyticsData();
     }
 
+    /// <inheritdoc/>
     public bool IsAnalyticsCollectionEnabled {
         set => FirebaseAnalytics.SetAnalyticsCollectionEnabled(value);
     }

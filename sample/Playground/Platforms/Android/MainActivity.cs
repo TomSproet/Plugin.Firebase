@@ -1,12 +1,13 @@
+using Android;
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
 using Android.Runtime;
-using Plugin.Firebase.Auth;
-using Plugin.Firebase.Auth.Facebook;
+using AndroidX.Core.App;
+using AndroidX.Core.Content;
 using Plugin.Firebase.CloudMessaging;
-using Plugin.Firebase.DynamicLinks;
+using System.Runtime.Versioning;
 
 namespace Playground;
 
@@ -19,21 +20,37 @@ public class MainActivity : MauiAppCompatActivity
         base.OnCreate(savedInstanceState);
         HandleIntent(this, Intent);
         CreateNotificationChannelIfNeeded();
+        RequestPushNotificationsPermission();
     }
 
     private static void HandleIntent(MainActivity activity,Intent intent)
     {
-        FirebaseCloudMessagingImplementation.OnNewIntent(activity, intent);
-        FirebaseDynamicLinksImplementation.HandleDynamicLinkAsync(intent).Ignore();
+        FirebaseCloudMessagingImplementation.OnNewIntent(intent);
+    }
+
+    private void RequestPushNotificationsPermission()
+    {
+        if(OperatingSystem.IsAndroidVersionAtLeast(33)) {
+            RequestPostNotificationsPermission();
+        }
+    }
+
+    [SupportedOSPlatform("android33.0")]
+    private void RequestPostNotificationsPermission()
+    {
+        if(ContextCompat.CheckSelfPermission(this, Manifest.Permission.PostNotifications) != Permission.Granted) {
+            ActivityCompat.RequestPermissions(this, new[] { Manifest.Permission.PostNotifications }, 0);
+        }
     }
 
     private void CreateNotificationChannelIfNeeded()
     {
-        if(Build.VERSION.SdkInt >= BuildVersionCodes.O) {
+        if(OperatingSystem.IsAndroidVersionAtLeast(26)) {
             CreateNotificationChannel();
         }
     }
 
+    [SupportedOSPlatform("android26.0")]
     private void CreateNotificationChannel()
     {
         var channelId = $"{PackageName}.general";
@@ -48,13 +65,6 @@ public class MainActivity : MauiAppCompatActivity
     {
         Platform.OnRequestPermissionsResult(requestCode, permissions, grantResults);
         base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
-    }
-
-    protected override void OnActivityResult(int requestCode, Result resultCode, Intent data)
-    {
-        base.OnActivityResult(requestCode, resultCode, data);
-        FirebaseAuthImplementation.HandleActivityResultAsync(requestCode, resultCode, data);
-        FirebaseAuthFacebookImplementation.HandleActivityResultAsync(requestCode, resultCode, data);
     }
 
     protected override void OnNewIntent(Intent intent)

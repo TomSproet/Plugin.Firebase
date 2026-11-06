@@ -1,24 +1,48 @@
 using System.Collections;
 using System.Diagnostics;
 using Firebase.CloudFirestore;
-using Foundation;
+using Firebase.Core;
 using Plugin.Firebase.Core.Platforms.iOS.Extensions;
 
 namespace Plugin.Firebase.Firestore.Platforms.iOS.Extensions;
 
+/// <summary>
+/// Extension methods for converting between .NET objects and native iOS NSObject types.
+/// </summary>
 public static class NSObjectExtensions
 {
-    public static T Cast<T>(this NSDictionary @this, string documentId = null)
+    /// <summary>
+    /// Casts a native iOS NSDictionary to a typed .NET object.
+    /// </summary>
+    /// <typeparam name="T">The target type to cast to.</typeparam>
+    /// <param name="this">The NSDictionary to cast.</param>
+    /// <param name="documentId">Optional document ID to set on the object.</param>
+    /// <returns>The typed object.</returns>
+    public static T? Cast<T>(this NSDictionary @this, string? documentId = null)
     {
-        return (T) @this.Cast(typeof(T), documentId);
+        return (T?) @this.Cast(typeof(T), documentId);
     }
 
-    public static object Cast(this NSDictionary @this, Type targetType, string documentId = null)
+    /// <summary>
+    /// Casts a native iOS NSDictionary to a .NET object of the specified type.
+    /// </summary>
+    /// <param name="this">The NSDictionary to cast.</param>
+    /// <param name="targetType">The target type to cast to.</param>
+    /// <param name="documentId">Optional document ID to set on the object.</param>
+    /// <returns>The converted object.</returns>
+    public static object? Cast(this NSDictionary @this, Type targetType, string? documentId = null)
     {
+        if(targetType == typeof(object) || IsDictionaryType(targetType)) {
+            return @this.ToDictionaryObject(targetType);
+        }
+
         var instance = Activator.CreateInstance(targetType);
         var properties = targetType.GetProperties();
         foreach(var property in properties) {
-            if(documentId != null && property.GetCustomAttributes(typeof(FirestoreDocumentIdAttribute), true).Any()) {
+            if(
+                documentId != null
+                && property.GetCustomAttributes(typeof(FirestoreDocumentIdAttribute), true).Any()
+            ) {
                 property.SetValue(instance, documentId);
                 continue;
             }
@@ -28,29 +52,48 @@ public static class NSObjectExtensions
                 var attribute = (FirestorePropertyAttribute) attributes[0];
                 var value = @this[attribute.PropertyName];
                 if(value == null) {
-                    Debug.WriteLine($"[Plugin.Firebase] Couldn't cast property '{attribute.PropertyName}' of '{targetType}' because it's not contained in the NSDictionary.");
+                    Debug.WriteLine(
+                        $"[Plugin.Firebase] Couldn't cast property '{attribute.PropertyName}' of '{targetType}' because it's not contained in the NSDictionary."
+                    );
                 } else {
                     property.SetValue(instance, value.ToObject(property.PropertyType));
                 }
             }
 
-            var timestampAttributes = property.GetCustomAttributes(typeof(FirestoreServerTimestampAttribute), true);
+            var timestampAttributes = property.GetCustomAttributes(
+                typeof(FirestoreServerTimestampAttribute),
+                true
+            );
             if(timestampAttributes.Any()) {
                 var attribute = (FirestoreServerTimestampAttribute) timestampAttributes[0];
                 var value = @this[attribute.PropertyName];
                 if(value == null) {
-                    Debug.WriteLine($"[Plugin.Firebase] Couldn't cast property '{attribute.PropertyName}' of '{targetType}' because value is null");
-                } else if(property.PropertyType == typeof(DateTimeOffset) && value is Timestamp timestamp) {
+                    Debug.WriteLine(
+                        $"[Plugin.Firebase] Couldn't cast property '{attribute.PropertyName}' of '{targetType}' because value is null"
+                    );
+                } else if(
+                      property.PropertyType == typeof(DateTimeOffset)
+                      && value is Timestamp timestamp
+                  ) {
                     property.SetValue(instance, timestamp.ToDateTimeOffset());
                 } else {
-                    Debug.WriteLine($"[Plugin.Firebase] Couldn't cast property '{attribute.PropertyName}' of '{targetType}' because properties that use the {nameof(FirestoreServerTimestampAttribute)} need to be of type {nameof(DateTimeOffset)} and value of type {nameof(Timestamp)}");
+                    Debug.WriteLine(
+                        $"[Plugin.Firebase] Couldn't cast property '{attribute.PropertyName}' of '{targetType}' because properties that use the {nameof(FirestoreServerTimestampAttribute)} need to be of type {nameof(DateTimeOffset)} and value of type {nameof(Timestamp)}"
+                    );
                 }
             }
         }
         return instance;
     }
 
-    public static object ToObject(this NSObject @this, Type targetType = null)
+    /// <summary>
+    /// Converts a native iOS NSObject to a .NET object.
+    /// </summary>
+    /// <param name="this">The NSObject to convert.</param>
+    /// <param name="targetType">Optional target type for the conversion.</param>
+    /// <returns>The converted .NET object.</returns>
+    /// <exception cref="ArgumentException">Thrown if the NSObject type cannot be converted.</exception>
+    public static object? ToObject(this NSObject @this, Type? targetType = null)
     {
         switch(@this) {
             case NSNumber x:
@@ -62,7 +105,7 @@ public static class NSObjectExtensions
             case NSDictionary x:
                 return x.ToDictionaryObject(targetType);
             case NSArray x:
-                return x.ToList(GetGenericListType(targetType));
+                return targetType is null ? x.ToList() : x.ToList(GetGenericListType(targetType));
             case global::Firebase.CloudFirestore.GeoPoint x:
                 return new GeoPoint(x.Latitude, x.Longitude);
             case Timestamp x:
@@ -72,20 +115,33 @@ public static class NSObjectExtensions
                     return x.ToDateTimeOffset();
             case DocumentReference x:
                 return new DocumentReferenceWrapper(x);
-            case NSNull x:
+            case NSNull:
                 return null;
             default:
-                throw new ArgumentException($"Could not convert NSObject of type {@this.GetType()} to object");
+                throw new ArgumentException(
+                    $"Could not convert NSObject of type {@this.GetType()} to object"
+                );
         }
     }
 
-    public static object ToObject(this NSNumber @this, Type targetType = null)
+    /// <summary>
+    /// Converts a native iOS NSNumber to a .NET object of the appropriate numeric type.
+    /// </summary>
+    /// <param name="this">The NSNumber to convert.</param>
+    /// <param name="targetType">Optional target type for the conversion.</param>
+    /// <returns>The converted numeric value.</returns>
+    public static object? ToObject(this NSNumber @this, Type? targetType = null)
     {
-        if(targetType == null) {
-            return @this.Int32Value;
+        if(targetType == null || targetType == typeof(object)) {
+            return @this.ToUntypedObject();
         }
 
-        switch(Type.GetTypeCode(targetType)) {
+        var conversionType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+        if(conversionType.IsEnum) {
+            return Enum.ToObject(conversionType, @this.Int64Value);
+        }
+
+        switch(Type.GetTypeCode(conversionType)) {
             case TypeCode.Boolean:
                 return @this.BoolValue;
             case TypeCode.Char:
@@ -115,18 +171,72 @@ public static class NSObjectExtensions
         }
     }
 
+    private static object ToUntypedObject(this NSNumber @this)
+    {
+        switch(@this.ObjCType) {
+            case "B":
+            case "c":
+                return @this.BoolValue;
+            case "C":
+                return @this.ByteValue;
+            case "s":
+                return @this.Int16Value;
+            case "S":
+                return @this.UInt16Value;
+            case "i":
+                return @this.Int32Value;
+            case "I":
+                return @this.UInt32Value;
+            case "q":
+            case "l":
+                return @this.Int64Value;
+            case "Q":
+            case "L":
+                return @this.UInt64Value;
+            case "f":
+                return @this.FloatValue;
+            case "d":
+                return @this.DoubleValue;
+            default:
+                return @this.Int64Value;
+        }
+    }
+
     private static Type GetGenericListType(Type targetType)
     {
-        var genericType = targetType.GenericTypeArguments?.FirstOrDefault();
+        if(targetType == null || targetType == typeof(object)) {
+            return typeof(object);
+        }
+
+        var genericType = targetType.GenericTypeArguments.FirstOrDefault();
         if(genericType == null) {
-            throw new ArgumentException($"Couldn't get generic list type of targetType {targetType}. Make sure to use a list IList<T> instead of an array T[] as type in your FirestoreObject.");
+            throw new ArgumentException(
+                $"Couldn't get generic list type of targetType {targetType}. Make sure to use a list IList<T> instead of an array T[] as type in your FirestoreObject."
+            );
         }
         return genericType;
     }
 
-    public static NSObject ToNSObject(this object @this)
+    private static bool IsDictionaryType(Type targetType)
+    {
+        return targetType.IsGenericType
+               && (
+                   targetType.GetGenericTypeDefinition() == typeof(IDictionary<,>)
+                   || targetType.GetGenericTypeDefinition() == typeof(Dictionary<,>)
+               );
+    }
+
+    /// <summary>
+    /// Converts a .NET object to a native iOS NSObject.
+    /// </summary>
+    /// <param name="this">The object to convert.</param>
+    /// <returns>The native iOS NSObject representation.</returns>
+    /// <exception cref="ArgumentException">Thrown if the object type cannot be converted.</exception>
+    public static NSObject ToNSObject(this object? @this)
     {
         switch(@this) {
+            case null:
+                return new NSNull();
             case NSObject x:
                 return x;
             case string x:
@@ -134,6 +244,8 @@ public static class NSObjectExtensions
             case int x:
                 return new NSNumber(x);
             case long x:
+                return new NSNumber(x);
+            case short x:
                 return new NSNumber(x);
             case float x:
                 return new NSNumber(x);
@@ -147,6 +259,8 @@ public static class NSObjectExtensions
                 return x.ToNSDate();
             case FieldValue x:
                 return x.ToNative();
+            case Plugin.Firebase.Firestore.GeoPoint x:
+                return new global::Firebase.CloudFirestore.GeoPoint(x.Latitude, x.Longitude);
             case IList x:
                 return x.ToNSArray();
             case IDictionary x:
@@ -176,10 +290,17 @@ public static class NSObjectExtensions
                         return new NSNumber(Convert.ToUInt16(@this));
                     }
                 }
-                throw new ArgumentException($"Could not convert object of type {@this.GetType()} to NSObject. Does it extend {nameof(IFirestoreObject)}?");
+                throw new ArgumentException(
+                    $"Could not convert object of type {@this.GetType()} to NSObject. Does it extend {nameof(IFirestoreObject)}?"
+                );
         }
     }
 
+    /// <summary>
+    /// Converts an <see cref="IFirestoreObject"/> to a native iOS NSObject.
+    /// </summary>
+    /// <param name="this">The Firestore object to convert.</param>
+    /// <returns>The native iOS NSObject representation.</returns>
     public static NSObject ToNSObject(this IFirestoreObject @this)
     {
         return @this.ToDictionary().ToNSObject();

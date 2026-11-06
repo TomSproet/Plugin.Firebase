@@ -6,7 +6,8 @@ namespace Plugin.Firebase.Auth;
 public interface IAuthTokenResult
 {
     /// <summary>
-    /// Retrieves the claim casted to the generic type param.
+    /// Retrieves the claim casted to the generic type parameter. Nested JSON objects are returned as dictionaries, and
+    /// nested JSON arrays are returned as lists.
     /// </summary>
     /// <param name="key">Key of the claim</param>
     /// <typeparam name="T">Type of the claim</typeparam>
@@ -18,10 +19,10 @@ public interface IAuthTokenResult
     /// </summary>
     DateTimeOffset AuthDate { get; }
 
-
     /// <summary>
     /// Stores the entire payload of claims found on the ID token. This includes the standard reserved claims as well as custom claims
-    /// set by the developer via the Admin SDK.
+    /// set by the developer via the Admin SDK. Nested JSON objects are represented as dictionaries, and nested JSON arrays are represented
+    /// as lists.
     /// </summary>
     IDictionary<string, object> Claims { get; }
 
@@ -38,15 +39,15 @@ public interface IAuthTokenResult
     /// <summary>
     /// Stores sign-in provider through which the token was obtained. This does not necessarily map to provider IDs.
     /// </summary>
-    string SignInProvider { get; }
+    string? SignInProvider { get; }
 
     /// <summary>
     /// Stores sign-in second factor through which the token was obtained.
     /// </summary>
-    string SignInSecondFactor { get; }
+    string? SignInSecondFactor { get; }
 
     /// <summary>
     /// Stores the JWT string of the ID token.
     /// </summary>
-    string Token { get; }
+    string? Token { get; }
 }

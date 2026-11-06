@@ -13,6 +13,9 @@ Cloud Functions for Firebase is a serverless framework that lets you automatical
 - Follow the instructions for the [basic setup](https://github.com/TobiasBuchholz/Plugin.Firebase/blob/master/README.md#basic-setup)
 - Enable Cloud Functions at your project in the [Firebase Console](https://console.firebase.google.com/)
 - [Deploy](https://firebase.google.com/docs/functions/get-started?hl=en) your own function
+- Call `CrossFirebaseFunctions.Initialize(string region)` if your functions are deployed outside the default `us-central1` region
+
+Call `CrossFirebaseFunctions.Initialize(string region)` before accessing `CrossFirebaseFunctions.Current` or `CrossFirebaseFunctions.IsSupported`. If you change the region after `Current` has already been created, reacquire `CrossFirebaseFunctions.Current` before creating new callable references. Existing `IFirebaseFunctions` and `IHttpsCallable` references keep using the instance they were created from.
 
 ## Usage
 
@@ -24,7 +27,36 @@ Since code should be documenting itself you can also take a look at the followin
 - [tests/.../FunctionsFixture.cs](https://github.com/TobiasBuchholz/Plugin.Firebase/blob/master/tests/Plugin.Firebase.IntegrationTests/Functions/FunctionsFixture.cs)
 - [tests/cloud-functions/.../index.ts](https://github.com/TobiasBuchholz/Plugin.Firebase/blob/master/tests/cloud-functions/functions/src/index.ts)
 
+## Next-release migration notes
+
+`IHttpsCallable.CallAsync(dataJson)` now sends any JSON value as the request data, as the callable protocol allows: an object, array, string, number, boolean or `null`. Previously Android rejected top-level arrays, strings, numbers and booleans, and iOS rejected top-level strings, numbers, booleans and `null`.
+
+On Android, `dataJson` is now parsed as strict JSON, as iOS already did. Input that Gson's lenient mode used to accept now throws Gson's `JsonSyntaxException` before the request is sent. iOS already threw a `FirebaseException` for the same input. Affected input includes:
+
+- Raw control characters inside a string, such as a literal line break or tab in a hand-built `{"note":"..."}` payload. This is the most likely breakage. Gson reports `Unescaped control characters`; write them as `\n` or `\t` instead.
+- Unquoted or single-quoted names and strings, such as `{key:'value'}`.
+- Comments, and `NaN` used as a value.
+
+Pass standard JSON, for example by building it with `System.Text.Json`, which escapes control characters.
+
+Android and iOS still handle a few inputs differently:
+
+- When an object repeats a name, Android keeps the last value and iOS keeps the first. Previously Android threw for a repeated top-level name.
+- On Android, an empty or whitespace-only `dataJson`, or `null` followed by other text, is still sent as `null`. iOS throws.
+
 ## Release notes
+- Version 4.0.0
+  - Fixed typed callable responses for native object, array, scalar, and null payloads
+- Version 3.1.1
+  - Using AdamE.Firebase.iOS.* minimum version 11
+- Version 3.1.0
+  - Update to .net8
+- Version 3.0.0
+  - Swapped Xamarin.Firebase.iOS.CloudFunctions (native SDK 8.10.0) for AdamE.Firebase.iOS.CloudFunctions (native SDK 10.24.0)
+- Version 2.0.3
+  - Added support for non-default regions
+- Version 2.0.2
+  - Bumped up Xamarin.Firebase.Functions package to version 120.3.1.3
 - Version 2.0.1
   - Remove unnecessary UseMaui property from csproj files
   - Readd net6.0 tfm

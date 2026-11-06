@@ -1,3 +1,5 @@
+#nullable enable
+
 using Android.Content;
 using Android.Gms.Extensions;
 using Firebase.Analytics;
@@ -13,44 +15,67 @@ public sealed class FirebaseAnalyticsImplementation : DisposableBase, IFirebaseA
         _firebaseAnalytics = FirebaseAnalytics.GetInstance(context);
     }
 
-    private static FirebaseAnalytics _firebaseAnalytics;
+    private static FirebaseAnalytics? _firebaseAnalytics;
 
-    public async Task<string> GetAppInstanceIdAsync()
+    public async Task<string?> GetAppInstanceIdAsync()
     {
-        return (string) await _firebaseAnalytics.GetAppInstanceId().AsAsync<Java.Lang.String>();
+        return (string?) await GetInitializedAnalytics().GetAppInstanceId().AsAsync<Java.Lang.String>();
     }
 
-    public void LogEvent(string eventName, IDictionary<string, object> parameters)
+    public void LogEvent(string eventName, IDictionary<string, object>? parameters)
     {
-        _firebaseAnalytics.LogEvent(eventName, parameters?.ToBundle());
+        GetInitializedAnalytics().LogEvent(eventName, parameters?.ToBundle());
     }
 
-    public void LogEvent(string eventName, params (string parameterName, object parameterValue)[] parameters)
+    public void LogEvent(string eventName, params (string parameterName, object parameterValue)[]? parameters)
     {
         LogEvent(eventName, parameters?.ToDictionary(x => x.parameterName, x => x.parameterValue));
     }
 
-    public void SetUserId(string id)
+    public void SetDefaultEventParameters(IDictionary<string, object>? parameters)
     {
-        _firebaseAnalytics.SetUserId(id);
+        GetInitializedAnalytics().SetDefaultEventParameters(parameters?.ToBundle());
     }
 
-    public void SetUserProperty(string name, string value)
+    public void SetDefaultEventParameters(params (string parameterName, object parameterValue)[]? parameters)
     {
-        _firebaseAnalytics.SetUserProperty(name, value);
+        SetDefaultEventParameters(parameters?.ToDictionary(x => x.parameterName, x => x.parameterValue));
+    }
+
+    public void SetConsent(IDictionary<ConsentType, ConsentStatus> consentSettings)
+    {
+        GetInitializedAnalytics().SetConsent(consentSettings.ToNativeConsentSettings());
+    }
+
+    public void SetUserId(string? id)
+    {
+        GetInitializedAnalytics().SetUserId(id);
+    }
+
+    public void SetUserProperty(string name, string? value)
+    {
+        GetInitializedAnalytics().SetUserProperty(name, value);
     }
 
     public void SetSessionTimoutDuration(TimeSpan duration)
     {
-        _firebaseAnalytics.SetSessionTimeoutDuration((long) duration.TotalMilliseconds);
+        GetInitializedAnalytics().SetSessionTimeoutDuration((long) duration.TotalMilliseconds);
     }
 
     public void ResetAnalyticsData()
     {
-        _firebaseAnalytics.ResetAnalyticsData();
+        GetInitializedAnalytics().ResetAnalyticsData();
     }
 
     public bool IsAnalyticsCollectionEnabled {
-        set => _firebaseAnalytics.SetAnalyticsCollectionEnabled(value);
+        set => GetInitializedAnalytics().SetAnalyticsCollectionEnabled(value);
+    }
+
+    private static FirebaseAnalytics GetInitializedAnalytics()
+    {
+        return _firebaseAnalytics ?? throw new InvalidOperationException(
+            "Firebase Analytics has not been initialized on Android. Call "
+                + "FirebaseAnalyticsImplementation.Initialize(activity) after CrossFirebase.Initialize(...)."
+        );
     }
 }

@@ -38,6 +38,12 @@ public static class DictionaryExtensions
             case string x:
                 @this.PutString(key, x);
                 break;
+            case IDictionary<string, object> x:
+                @this.PutBundle(key, x.ToBundle());
+                break;
+            case IEnumerable<IDictionary<string, object>> x:
+                @this.PutParcelableArray(key, x.Select(d => d.ToBundle()).ToArray<IParcelable>());
+                break;
             default:
                 if(value == null) {
                     @this.PutString(key, null);

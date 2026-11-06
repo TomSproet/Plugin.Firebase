@@ -1,29 +1,57 @@
 using Plugin.Firebase.Analytics;
+using Plugin.Firebase.AppCheck;
 using Plugin.Firebase.Auth;
 using Plugin.Firebase.CloudMessaging;
-using Plugin.Firebase.DynamicLinks;
 using Plugin.Firebase.Firestore;
 using Plugin.Firebase.Functions;
+using Plugin.Firebase.Installations;
+using Plugin.Firebase.PerformanceMonitoring;
 using Plugin.Firebase.RemoteConfig;
 using Plugin.Firebase.Storage;
 
-namespace Plugin.Firebase.IntegrationTests
+namespace Plugin.Firebase.IntegrationTests;
+
+[Collection("Sequential")]
+[TestLogging]
+[IntegrationTestCoverageIgnore("Harness smoke test; package acceptance is tracked by package fixtures.")]
+[Preserve(AllMembers = true)]
+public class MustPassFixture
 {
-    [Preserve(AllMembers = true)]
-    public class MustPassFixture
+    [Fact]
+    public void must_pass()
     {
-        [Fact]
-        public void must_pass()
-        {
-            Assert.True(true);
-            Assert.True(CrossFirebaseAnalytics.IsSupported);
-            Assert.True(CrossFirebaseAuth.IsSupported);
-            Assert.True(CrossFirebaseCloudMessaging.IsSupported);
-            Assert.True(CrossFirebaseDynamicLinks.IsSupported);
-            Assert.True(CrossFirebaseFirestore.IsSupported);
-            Assert.True(CrossFirebaseFunctions.IsSupported);
-            Assert.True(CrossFirebaseStorage.IsSupported);
-            Assert.True(CrossFirebaseRemoteConfig.IsSupported);
+        Assert.True(true);
+        Assert.True(CrossFirebaseAnalytics.IsSupported);
+        Assert.True(CrossFirebaseAuth.IsSupported);
+        Assert.True(CrossFirebaseCloudMessaging.IsSupported);
+        Assert.True(CrossFirebaseFirestore.IsSupported);
+        Assert.True(CrossFirebaseFunctions.IsSupported);
+        Assert.True(CrossFirebaseInstallations.IsSupported);
+        Assert.True(CrossFirebasePerformanceMonitoring.IsSupported);
+        Assert.True(CrossFirebaseStorage.IsSupported);
+        Assert.True(CrossFirebaseRemoteConfig.IsSupported);
+        Assert.True(CrossFirebaseAppCheck.IsSupported);
+
+        if(OperatingSystem.IsAndroid()) {
+            Assert.Throws<NotSupportedException>(() => CrossFirebaseAppCheck.Configure(AppCheckOptions.DeviceCheck));
+            Assert.Throws<NotSupportedException>(() => CrossFirebaseAppCheck.Configure(AppCheckOptions.AppAttest));
+            // Android cannot remove a provider factory, so finish on Debug for the rest of the run.
+            CrossFirebaseAppCheck.Configure(AppCheckOptions.PlayIntegrity);
+            CrossFirebaseAppCheck.Configure(AppCheckOptions.Debug);
         }
+
+        if(OperatingSystem.IsIOS()) {
+            // iOS can't change the provider after initialization, so only check the unsupported provider.
+            Assert.Throws<NotSupportedException>(() => CrossFirebaseAppCheck.Configure(AppCheckOptions.PlayIntegrity));
+        }
+    }
+
+    [RealFirebaseOptInFact(IntegrationTestEnvironment.RunAppCheckTokenTestsEnvironmentVariableName)]
+    public async Task fetches_app_check_token_when_enabled_via_environment()
+    {
+        // With token tests enabled, the harness configures the Debug provider before CrossFirebase.Initialize().
+        var token = await CrossFirebaseAppCheck.GetTokenAsync(forceRefresh: true);
+
+        Assert.False(string.IsNullOrWhiteSpace(token));
     }
 }

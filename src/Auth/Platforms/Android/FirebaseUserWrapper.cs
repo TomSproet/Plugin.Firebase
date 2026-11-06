@@ -3,10 +3,12 @@ using Android.Runtime;
 using Firebase.Auth;
 using Plugin.Firebase.Auth.Platforms.Android.Extensions;
 using Uri = Android.Net.Uri;
+using NativeProfileChangeRequest = Firebase.Auth.UserProfileChangeRequest;
+using ProfileChangeRequest = Plugin.Firebase.Auth.UserProfileChangeRequest;
 
 namespace Plugin.Firebase.Auth.Platforms.Android;
 
-public sealed class FirebaseUserWrapper : IFirebaseUser
+public sealed class FirebaseUserWrapper : IFirebaseUser, IUserProfileChangeRequestHandler
 {
     private readonly FirebaseUser _wrapped;
 
@@ -22,59 +24,94 @@ public sealed class FirebaseUserWrapper : IFirebaseUser
 
     public Task UpdateEmailAsync(string email)
     {
-        return _wrapped.UpdateEmailAsync(email);
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.UpdateEmailAsync(email));
     }
 
     public Task UpdatePasswordAsync(string password)
     {
-        return _wrapped.UpdatePasswordAsync(password);
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.UpdatePasswordAsync(password));
+    }
+
+    public Task ReauthenticateWithEmailAndPasswordAsync(string email, string password)
+    {
+        var credential = EmailAuthProvider.GetCredential(email, password);
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.ReauthenticateAsync(credential));
+    }
+
+    public Task ReloadAsync()
+    {
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.ReloadAsync());
     }
 
     public Task UpdatePhoneNumberAsync(string verificationId, string smsCode)
     {
-        return _wrapped.UpdatePhoneNumberAsync(PhoneAuthProvider.GetCredential(verificationId, smsCode));
+        return FirebaseAuthExceptionFactory.Wrap(
+            () => _wrapped.UpdatePhoneNumberAsync(PhoneAuthProvider.GetCredential(verificationId, smsCode))
+        );
     }
 
-    public Task UpdateProfileAsync(string displayName = "", string photoUrl = "")
+    public Task UpdateProfileAsync(ProfileChangeRequest request)
     {
-        var builder = new UserProfileChangeRequest.Builder();
+        var builder = new NativeProfileChangeRequest.Builder();
+        if(request.UpdatesDisplayName) {
+            builder.SetDisplayName(request.DisplayName);
+        }
+        if(request.UpdatesPhotoUrl) {
+            builder.SetPhotoUri(request.PhotoUrl == null ? null : Uri.Parse(request.PhotoUrl));
+        }
+
+        var nativeRequest = builder.Build();
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.UpdateProfileAsync(nativeRequest));
+    }
+
+    [Obsolete("Use UpdateProfileAsync(UserProfileChangeRequest request) to distinguish omitted, null, and empty string values.")]
+    public Task UpdateProfileAsync(string? displayName = "", string? photoUrl = "")
+    {
+        var builder = new ProfileChangeRequest.Builder();
         if(displayName != "") {
             builder.SetDisplayName(displayName);
         }
         if(photoUrl != "") {
-            builder.SetPhotoUri(photoUrl == null ? null : Uri.Parse(photoUrl));
+            builder.SetPhotoUrl(photoUrl);
         }
-        return _wrapped.UpdateProfileAsync(builder.Build());
+
+        return UpdateProfileAsync(builder.Build());
     }
 
-    public Task SendEmailVerificationAsync(ActionCodeSettings actionCodeSettings = null)
+    public Task SendEmailVerificationAsync(ActionCodeSettings? actionCodeSettings = null)
     {
-        return _wrapped.SendEmailVerificationAsync(actionCodeSettings?.ToNative());
+        var nativeActionCodeSettings = actionCodeSettings?.ToNative();
+        return FirebaseAuthExceptionFactory.Wrap(
+            () => _wrapped.SendEmailVerificationAsync(nativeActionCodeSettings!)
+        );
     }
 
     public Task UnlinkAsync(string providerId)
     {
-        return _wrapped.UnlinkAsync(providerId);
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.UnlinkAsync(providerId));
     }
 
     public Task DeleteAsync()
     {
-        return _wrapped.DeleteAsync();
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.DeleteAsync());
     }
 
     public async Task<IAuthTokenResult> GetIdTokenResultAsync(bool forceRefresh = false)
     {
-        var result = (await _wrapped.GetIdToken(forceRefresh)).JavaCast<GetTokenResult>();
+        var result = await FirebaseAuthExceptionFactory.Wrap(
+            async () => (await _wrapped.GetIdToken(forceRefresh)).JavaCast<GetTokenResult>()
+        );
         return result.ToAbstract();
     }
 
     public string Uid => _wrapped.Uid;
-    public string DisplayName => _wrapped.DisplayName;
-    public string Email => _wrapped.Email;
-    public string PhotoUrl => _wrapped.PhotoUrl?.ToString();
+    public string? DisplayName => _wrapped.DisplayName;
+    public string? Email => _wrapped.Email;
+    public string? PhotoUrl => _wrapped.PhotoUrl?.ToString();
     public string ProviderId => _wrapped.ProviderId;
     public bool IsEmailVerified => _wrapped.IsEmailVerified;
     public bool IsAnonymous => _wrapped.IsAnonymous;
-    public IEnumerable<ProviderInfo> ProviderInfos => _wrapped.ProviderData?.Select(x => x.ToAbstract());
-    public UserMetadata Metadata => _wrapped.Metadata?.ToAbstract();
+    public IEnumerable<ProviderInfo>? ProviderInfos =>
+        _wrapped.ProviderData?.Select(x => x.ToAbstract());
+    public UserMetadata? Metadata => _wrapped.Metadata?.ToAbstract();
 }

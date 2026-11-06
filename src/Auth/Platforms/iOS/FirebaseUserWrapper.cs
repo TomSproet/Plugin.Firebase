@@ -1,80 +1,151 @@
 using Firebase.Auth;
-using Foundation;
 using Plugin.Firebase.Auth.Platforms.iOS.Extensions;
+using ProfileChangeRequest = Plugin.Firebase.Auth.UserProfileChangeRequest;
 
 namespace Plugin.Firebase.Auth.Platforms.iOS;
 
-public sealed class FirebaseUserWrapper : IFirebaseUser
+/// <summary>
+/// Wraps a native iOS Firebase User for cross-platform access.
+/// </summary>
+public sealed class FirebaseUserWrapper : IFirebaseUser, IUserProfileChangeRequestHandler
 {
     private readonly User _wrapped;
 
+    /// <summary>
+    /// Initializes a new instance wrapping the specified native Firebase user.
+    /// </summary>
+    /// <param name="firebaseUser">The native iOS Firebase User to wrap.</param>
     public FirebaseUserWrapper(User firebaseUser)
     {
         _wrapped = firebaseUser;
     }
 
+    /// <inheritdoc/>
     public override string ToString()
     {
         return $"[{nameof(FirebaseUserWrapper)}: {nameof(Uid)}={Uid}, {nameof(Email)}={Email}]";
     }
 
+    /// <inheritdoc/>
     public Task UpdateEmailAsync(string email)
     {
-        return _wrapped.UpdateEmailAsync(email);
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.UpdateEmailAsync(email));
     }
 
+    /// <inheritdoc/>
     public Task UpdatePasswordAsync(string password)
     {
-        return _wrapped.UpdatePasswordAsync(password);
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.UpdatePasswordAsync(password));
     }
 
+    /// <inheritdoc/>
+    public Task ReauthenticateWithEmailAndPasswordAsync(string email, string password)
+    {
+        var credential = EmailAuthProvider.GetCredentialFromPassword(email, password);
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.ReauthenticateAsync(credential));
+    }
+
+    /// <inheritdoc/>
+    public Task ReloadAsync()
+    {
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.ReloadAsync());
+    }
+
+    /// <inheritdoc/>
     public Task UpdatePhoneNumberAsync(string verificationId, string smsCode)
     {
-        return _wrapped.UpdatePhoneNumberCredentialAsync(PhoneAuthProvider.DefaultInstance.GetCredential(verificationId, smsCode));
+        return FirebaseAuthExceptionFactory.Wrap(
+            () => _wrapped.UpdatePhoneNumberCredentialAsync(
+                PhoneAuthProvider.DefaultInstance.GetCredential(verificationId, smsCode)
+            )
+        );
     }
 
-    public Task UpdateProfileAsync(string displayName = "", string photoUrl = "")
+    /// <inheritdoc/>
+    public Task UpdateProfileAsync(ProfileChangeRequest request)
     {
-        var request = _wrapped.ProfileChangeRequest();
+        var nativeRequest = _wrapped.ProfileChangeRequest();
+        if(request.UpdatesDisplayName) {
+            nativeRequest.DisplayName = request.DisplayName;
+        }
+        if(request.UpdatesPhotoUrl) {
+            nativeRequest.PhotoUrl = request.PhotoUrl == null ? null : new NSUrl(request.PhotoUrl);
+        }
+
+        return FirebaseAuthExceptionFactory.Wrap(() => nativeRequest.CommitChangesAsync());
+    }
+
+    /// <inheritdoc/>
+    [Obsolete("Use UpdateProfileAsync(UserProfileChangeRequest request) to distinguish omitted, null, and empty string values.")]
+    public Task UpdateProfileAsync(string? displayName = "", string? photoUrl = "")
+    {
+        var builder = new ProfileChangeRequest.Builder();
         if(displayName != "") {
-            request.DisplayName = displayName;
+            builder.SetDisplayName(displayName);
         }
         if(photoUrl != "") {
-            request.PhotoUrl = photoUrl == null ? null : new NSUrl(photoUrl);
+            builder.SetPhotoUrl(photoUrl);
         }
-        return request.CommitChangesAsync();
+
+        return UpdateProfileAsync(builder.Build());
     }
 
-    public Task SendEmailVerificationAsync(ActionCodeSettings actionCodeSettings = null)
+    /// <inheritdoc/>
+    public Task SendEmailVerificationAsync(ActionCodeSettings? actionCodeSettings = null)
     {
-        return actionCodeSettings == null
-            ? _wrapped.SendEmailVerificationAsync()
-            : _wrapped.SendEmailVerificationAsync(actionCodeSettings.ToNative());
+        return FirebaseAuthExceptionFactory.Wrap(
+            () => actionCodeSettings == null
+                ? _wrapped.SendEmailVerificationAsync()
+                : _wrapped.SendEmailVerificationAsync(actionCodeSettings.ToNative())
+        );
     }
 
+    /// <inheritdoc/>
     public Task UnlinkAsync(string providerId)
     {
-        return _wrapped.UnlinkAsync(providerId);
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.UnlinkAsync(providerId));
     }
 
+    /// <inheritdoc/>
     public Task DeleteAsync()
     {
-        return _wrapped.DeleteAsync();
+        return FirebaseAuthExceptionFactory.Wrap(() => _wrapped.DeleteAsync());
     }
 
+    /// <inheritdoc/>
     public async Task<IAuthTokenResult> GetIdTokenResultAsync(bool forceRefresh = false)
     {
-        var result = await _wrapped.GetIdTokenResultAsync(forceRefresh);
+        var result = await FirebaseAuthExceptionFactory.Wrap(
+            () => _wrapped.GetIdTokenResultAsync(forceRefresh)
+        );
         return result.ToAbstract();
     }
 
+    /// <inheritdoc/>
     public string Uid => _wrapped.Uid;
-    public string DisplayName => _wrapped.DisplayName;
-    public string Email => _wrapped.Email;
-    public string PhotoUrl => _wrapped.PhotoUrl?.AbsoluteString;
+
+    /// <inheritdoc/>
+    public string? DisplayName => _wrapped.DisplayName;
+
+    /// <inheritdoc/>
+    public string? Email => _wrapped.Email;
+
+    /// <inheritdoc/>
+    public string? PhotoUrl => _wrapped.PhotoUrl?.AbsoluteString;
+
+    /// <inheritdoc/>
     public string ProviderId => _wrapped.ProviderId;
+
+    /// <inheritdoc/>
     public bool IsEmailVerified => _wrapped.IsEmailVerified;
+
+    /// <inheritdoc/>
     public bool IsAnonymous => _wrapped.IsAnonymous;
-    public IEnumerable<ProviderInfo> ProviderInfos => _wrapped.ProviderData?.Select(x => x.ToAbstract());
-    public UserMetadata Metadata => _wrapped.Metadata?.ToAbstract();
+
+    /// <inheritdoc/>
+    public IEnumerable<ProviderInfo>? ProviderInfos =>
+        _wrapped.ProviderData?.Select(x => x.ToAbstract());
+
+    /// <inheritdoc/>
+    public UserMetadata? Metadata => _wrapped.Metadata?.ToAbstract();
 }

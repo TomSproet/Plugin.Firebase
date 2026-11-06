@@ -1,5 +1,8 @@
 namespace Plugin.Firebase.Storage;
 
+/// <summary>
+/// Represents the result of a storage list operation.
+/// </summary>
 public interface IStorageListResult
 {
     /// <summary>
@@ -13,7 +16,8 @@ public interface IStorageListResult
     IEnumerable<IStorageReference> Prefixes { get; }
 
     /// <summary>
-    /// Returns a token that can be used to resume a previous <c>ListAsync()</c> operation. null indicates that there are no more results.
+    /// Returns a token that can be used to resume a previous <c>ListAsync()</c> operation.
+    /// <see langword="null"/> indicates that there are no more results.
     /// </summary>
-    string PageToken { get; }
+    string? PageToken { get; }
 }

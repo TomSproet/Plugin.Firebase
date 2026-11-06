@@ -3,7 +3,7 @@ namespace Plugin.Firebase.Auth;
 /// <summary>
 /// Manages authentication for Firebase apps.
 /// </summary>
-public interface IFirebaseAuth : IDisposable
+public partial interface IFirebaseAuth : IDisposable
 {
     /// <summary>
     /// Starts the phone number authentication flow by sending a verification code to the specified phone number.
@@ -40,7 +40,11 @@ public interface IFirebaseAuth : IDisposable
     /// <param name="password">The user’s password.</param>
     /// <param name="createsUserAutomatically">If the user doesn't exist, it will be created automatically and signed in afterwards if the value is true.</param>
     /// <returns>The signed in <c>IFirebaseUser</c> object.</returns>
-    Task<IFirebaseUser> SignInWithEmailAndPasswordAsync(string email, string password, bool createsUserAutomatically = true);
+    Task<IFirebaseUser> SignInWithEmailAndPasswordAsync(
+        string email,
+        string password,
+        bool createsUserAutomatically = true
+    );
 
     /// <summary>
     /// Signs in using an email address and email sign-in link.
@@ -49,18 +53,6 @@ public interface IFirebaseAuth : IDisposable
     /// <param name="link">The email sign-in link.</param>
     /// <returns>The signed in <c>IFirebaseUser</c> object.</returns>
     Task<IFirebaseUser> SignInWithEmailLinkAsync(string email, string link);
-
-    /// <summary>
-    /// Signs in using a google account.
-    /// </summary>
-    /// <returns>The signed in <c>IFirebaseUser</c> object.</returns>
-    Task<IFirebaseUser> SignInWithGoogleAsync();
-
-    /// <summary>
-    /// Signs in using a Apple account.
-    /// </summary>
-    /// <returns>The signed in <c>IFirebaseUser</c> object.</returns>
-    Task<IFirebaseUser> SignInWithAppleAsync();
 
     /// <summary>
     /// Asynchronously creates and becomes an anonymous user. If there is already an anonymous user signed in, that user will
@@ -83,18 +75,6 @@ public interface IFirebaseAuth : IDisposable
     /// <param name="password">The user’s password.</param>
     /// <returns>The signed in <c>IFirebaseUser</c> object.</returns>
     Task<IFirebaseUser> LinkWithEmailAndPasswordAsync(string email, string password);
-
-    /// <summary>
-    /// Link the signed in user with a google account.
-    /// </summary>
-    /// <returns>The signed in <c>IFirebaseUser</c> object.</returns>
-    Task<IFirebaseUser> LinkWithGoogleAsync();
-
-    /// <summary>
-    /// Fetches the list of all sign-in methods previously used for the provided email address.
-    /// </summary>
-    /// <param name="email">The email address for which to obtain a list of sign-in methods.</param>
-    Task<string[]> FetchSignInMethodsAsync(string email);
 
     /// <summary>
     /// Sends a sign in with email link to provided email address.
@@ -126,6 +106,25 @@ public interface IFirebaseAuth : IDisposable
     Task SendPasswordResetEmailAsync(string email);
 
     /// <summary>
+    /// Reloads the currently signed in user from the backend.
+    /// </summary>
+    /// <exception cref="Plugin.Firebase.Core.Exceptions.FirebaseException">Thrown when no user is signed in.</exception>
+    [Obsolete("Use CurrentUser.ReloadAsync() after checking CurrentUser is not null.")]
+    Task ReloadCurrentUserAsync();
+
+    /// <summary>
+    /// Sets the language used by Firebase Auth for user-facing flows such as Auth-generated emails/SMS (password reset, email verification, phone auth).
+    /// Call this before invoking an API that triggers the flow, then reset by calling <see cref="UseAppLanguage"/>.
+    /// </summary>
+    /// <param name="value">A BCP-47 language code (e.g. "fr", "en-GB"), or null to clear.</param>
+    string? LanguageCode { set; }
+
+    /// <summary>
+    /// Uses the app language for Firebase Auth user-facing flows.
+    /// </summary>
+    void UseAppLanguage();
+
+    /// <summary>
     /// Modify this FirebaseAuth instance to communicate with the Firebase Authentication emulator.
     /// Note: this must be called before this instance has been used to do any operations.
     /// </summary>
@@ -134,7 +133,14 @@ public interface IFirebaseAuth : IDisposable
     void UseEmulator(string host, int port);
 
     /// <summary>
+    /// Registers a listener for authentication state changes.
+    /// </summary>
+    /// <param name="listener">Action invoked.</param>
+    /// <returns>A token that detaches the listener when disposed.</returns>
+    IDisposable AddAuthStateListener(Action<IFirebaseAuth> listener);
+
+    /// <summary>
     /// The currently signed in <c>IFirebaseUser</c> object or <c>null</c> if the user is signed out.
     /// </summary>
-    IFirebaseUser CurrentUser { get; }
+    IFirebaseUser? CurrentUser { get; }
 }

@@ -18,19 +18,19 @@ public interface IStorageReference
     /// Uploads a byte array to firebase storage bucket.<br></br>
     /// CAUTION: Although this method returns an IStorageUploadTask, which has an AwaitAsync() method, the upload will start immediately on iOS
     /// </summary>
-    IStorageTransferTask PutBytes(byte[] bytes, IStorageMetadata metaData = null);
+    IStorageTransferTask PutBytes(byte[] bytes, IStorageMetadata? metaData = null);
 
     /// <summary>
     /// Uploads a file via it's file path to firebase storage bucket.<br></br>
     /// CAUTION: Although this method returns an IStorageUploadTask, which has an AwaitAsync() method, the upload will start immediately on iOS
     /// </summary>
-    IStorageTransferTask PutFile(string filePath, IStorageMetadata metaData = null);
+    IStorageTransferTask PutFile(string filePath, IStorageMetadata? metaData = null);
 
     /// <summary>
     /// Uploads a file via it's data stream to firebase storage bucket.<br></br>
     /// CAUTION: Although this method returns an IStorageUploadTask, which has an AwaitAsync() method, the upload will start immediately on iOS
     /// </summary>
-    IStorageTransferTask PutStream(Stream stream, IStorageMetadata metaData = null);
+    IStorageTransferTask PutStream(Stream stream, IStorageMetadata? metaData = null);
 
     /// <summary>
     /// Retrieves metadata associated with an object at the current path.
@@ -67,14 +67,27 @@ public interface IStorageReference
     Task<IStorageListResult> ListAllAsync();
 
     /// <summary>
-    /// Asynchronously downloads the object at the <c>IStorageReference</c> to memory. The provided max size will be allocated, so ensure
-    /// that the device has enough free memory to complete the download. For downloading large files, <c>DownloadFile(destinationPath)</c>
-    /// may be a better option.
+    /// Asynchronously downloads the object at the <c>IStorageReference</c> to memory and returns it as a read-only stream.
+    /// On both platforms the entire object is buffered in memory before the task completes, so memory usage grows with the
+    /// object size. For downloading large files, <c>DownloadFile(destinationPath)</c> may be a better option.
     /// </summary>
     /// <param name="maxSize">
-    /// The maximum size in bytes to download. If the download exceeds this size the task will be cancelled and an error will be returned.
+    /// The maximum size in bytes to download. If the object exceeds this size the task fails. The exception type differs by
+    /// platform: Android surfaces the native <c>StorageException</c>, iOS throws a <c>FirebaseException</c>.
     /// </param>
     Task<Stream> GetStreamAsync(long maxSize);
+
+    /// <summary>
+    /// Asynchronously downloads the object from this <c>IStorageReference</c>. A byte array will be allocated large enough to hold the entire file in memory.
+    /// Therefore, using this method will impact memory usage of your process. For downloading large files, <c>DownloadFile(destinationPath)</c>
+    /// may be a better option.
+    /// </summary>
+    /// <param name="maxDownloadSizeBytes">
+    /// The maximum size in bytes to download. Set this parameter to prevent out of memory conditions from occurring. If the object exceeds
+    /// this size the task fails. The exception type differs by platform: Android surfaces the native <c>StorageException</c>, iOS throws a
+    /// <c>FirebaseException</c>.
+    /// </param>
+    Task<byte[]> GetBytesAsync(long maxDownloadSizeBytes);
 
     /// <summary>
     /// Asynchronously downloads the object at the current path to a specified system filepath.
@@ -91,7 +104,7 @@ public interface IStorageReference
     /// Creates a new <c>IStorageReference</c> pointing to the parent of the current reference or null if this instance references the root location.
     /// For example: path = foo/bar/baz parent = foo/bar path = foo parent = (root) path = (root) parent = null.
     /// </summary>
-    IStorageReference Parent { get; }
+    IStorageReference? Parent { get; }
 
     /// <summary>
     /// Creates a new <c>IStorageReference</c> pointing to the root object.

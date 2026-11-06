@@ -15,6 +15,11 @@ public sealed class FirebaseFirestoreImplementation : DisposableBase, IFirebaseF
         _firestore = FirebaseFirestore.Instance;
     }
 
+    public IQuery GetCollectionGroup(string collectionId)
+    {
+        return new QueryWrapper(_firestore.CollectionGroup(collectionId));
+    }
+
     public ICollectionReference GetCollection(string collectionPath)
     {
         return new CollectionReferenceWrapper(_firestore.Collection(collectionPath));
@@ -25,10 +30,10 @@ public sealed class FirebaseFirestoreImplementation : DisposableBase, IFirebaseF
         return new DocumentReferenceWrapper(_firestore.Document(documentPath));
     }
 
-    public async Task<TResult> RunTransactionAsync<TResult>(Func<ITransaction, TResult> updateFunc)
+    public async Task<TResult?> RunTransactionAsync<TResult>(Func<ITransaction, TResult> updateFunc)
     {
         var result = await _firestore.RunTransaction(new TransactionFunction<TResult>(updateFunc));
-        return (TResult) result?.ToObject(typeof(TResult));
+        return (TResult?) result?.ToObject(typeof(TResult));
     }
 
     public IWriteBatch CreateBatch()

@@ -1,0 +1,67 @@
+using System.Net.Http;
+
+namespace Plugin.Firebase.PerformanceMonitoring;
+
+/// <summary>
+/// Firebase Performance Monitoring service for custom code traces and custom network request metrics.
+/// </summary>
+public interface IFirebasePerformanceMonitoring : IDisposable
+{
+    /// <summary>
+    /// Gets or sets whether Performance Monitoring data collection is enabled for this app instance.
+    /// </summary>
+    bool IsDataCollectionEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the native SDK's automatic instrumentation (app start, screen rendering and network
+    /// request traces) is enabled.
+    /// </summary>
+    /// <remarks>
+    /// iOS only. The Android SDK has no runtime instrumentation switch, so both the getter and the setter throw
+    /// <see cref="NotSupportedException"/> there; use <c>IsDataCollectionEnabled</c> or the manifest keys instead.
+    /// <para>
+    /// The value is persisted and overrides the <c>firebase_performance_instrumentation_enabled</c> key in
+    /// <c>Info.plist</c>. Enabling it takes effect immediately, even before <c>CrossFirebase.Initialize()</c>. Disabling
+    /// it only takes effect immediately while instrumentation hasn't started, that is before
+    /// <c>CrossFirebase.Initialize()</c> and before any enable in the same launch. Otherwise it applies from the next
+    /// app start, and the getter keeps returning <c>true</c> while instrumentation is still running.
+    /// </para>
+    /// </remarks>
+    bool IsInstrumentationEnabled { get; set; }
+
+    /// <summary>
+    /// Creates a new custom trace with the given name.
+    /// </summary>
+    /// <param name="traceName">The trace name.</param>
+    /// <returns>A new custom trace.</returns>
+    IFirebasePerformanceTrace NewTrace(string traceName);
+
+    /// <summary>
+    /// Creates and starts a new custom trace with the given name.
+    /// </summary>
+    /// <param name="traceName">The trace name.</param>
+    /// <returns>A started custom trace.</returns>
+    IFirebasePerformanceTrace StartTrace(string traceName);
+
+    /// <summary>
+    /// Creates a custom HTTP network request metric.
+    /// </summary>
+    /// <param name="url">The request URL.</param>
+    /// <param name="httpMethod">The request HTTP method.</param>
+    /// <returns>A new custom HTTP metric.</returns>
+    IFirebasePerformanceHttpMetric NewHttpMetric(
+        string url,
+        HttpMethod httpMethod
+    );
+
+    /// <summary>
+    /// Creates a custom HTTP network request metric.
+    /// </summary>
+    /// <param name="url">The request URL.</param>
+    /// <param name="httpMethod">The request HTTP method.</param>
+    /// <returns>A new custom HTTP metric.</returns>
+    IFirebasePerformanceHttpMetric NewHttpMetric(
+        Uri url,
+        HttpMethod httpMethod
+    );
+}

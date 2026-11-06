@@ -12,7 +12,7 @@ public static class NotificationBuilderExtensions
         try {
             if(Uri.IsWellFormedUriString(notification.ImageUrl, UriKind.Absolute)) {
                 var bitmap = DecodeBitmap(notification.ImageUrl);
-                return @this.SetLargeIcon(bitmap).SetStyle(new NotificationCompat.BigPictureStyle().BigPicture(bitmap).BigLargeIcon(null));
+                return @this.SetLargeIcon(bitmap).SetStyle(new NotificationCompat.BigPictureStyle().BigPicture(bitmap).BigLargeIcon((Bitmap)null));
             } else {
                 return @this;
             }
@@ -24,7 +24,7 @@ public static class NotificationBuilderExtensions
 
     private static Bitmap DecodeBitmap(string url)
     {
-        var connection = (URLConnection) new URL(url).OpenConnection();
+        var connection = new URL(url).OpenConnection();
         return connection == null
             ? throw new FirebaseException($"Couldn't open connection to url: {url}")
             : DecodeBitmap(connection);

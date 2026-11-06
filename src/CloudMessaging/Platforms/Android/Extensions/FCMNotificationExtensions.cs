@@ -1,5 +1,4 @@
 using Android.Content;
-using Android.OS;
 using Firebase.Messaging;
 
 namespace Plugin.Firebase.CloudMessaging.Platforms.Android.Extensions;
@@ -9,6 +8,7 @@ public static class FCMNotificationExtensions
     private const string BundleKeyTitle = "title";
     private const string BundleKeyBody = "body";
     private const string BundleKeyImageUrl = "image_url";
+    private const string BundleKeyChannelId = "channel_id";
     private const string BundleKeyData = "data";
 
     public static FCMNotification ToFCMNotification(this RemoteMessage message)
@@ -19,7 +19,9 @@ public static class FCMNotificationExtensions
             notification?.Body,
             notification?.Title,
             notification?.ImageUrl?.ToString(),
-             message.Data);
+            message.Data) {
+            ChannelId = notification?.ChannelId
+        };
     }
 
     public static FCMNotification ToFCMNotification(this Bundle bundle)
@@ -28,7 +30,9 @@ public static class FCMNotificationExtensions
             bundle.GetString(BundleKeyBody),
             bundle.GetString(BundleKeyTitle),
             bundle.GetString(BundleKeyImageUrl),
-            bundle.GetBundle(BundleKeyData).ToDictionary());
+            bundle.GetBundle(BundleKeyData).ToDictionary()) {
+            ChannelId = bundle.GetString(BundleKeyChannelId)
+        };
     }
 
     public static Bundle ToBundle(this FCMNotification notification)
@@ -37,6 +41,7 @@ public static class FCMNotificationExtensions
         bundle.PutString(BundleKeyBody, notification.Body);
         bundle.PutString(BundleKeyTitle, notification.Title);
         bundle.PutString(BundleKeyImageUrl, notification.ImageUrl);
+        bundle.PutString(BundleKeyChannelId, notification.ChannelId);
         bundle.PutBundle(BundleKeyData, notification.Data?.ToBundle());
         return bundle;
     }

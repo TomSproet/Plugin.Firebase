@@ -1,4 +1,3 @@
-using Playground.Common.Services.DynamicLink;
 using Playground.Common.Services.PushNotification;
 
 namespace Playground.Features.Dashboard;
@@ -11,7 +10,6 @@ public sealed class DashboardViewModel : ViewModelBase
     private readonly IUserInteractionService _userInteractionService;
 
     public DashboardViewModel(
-        IDynamicLinkService dynamicLinkService,
         INavigationService navigationService,
         IPushNotificationService pushNotificationService,
         IUserInteractionService userInteractionService)
@@ -22,13 +20,13 @@ public sealed class DashboardViewModel : ViewModelBase
 
         InitCommands();
         HandleTappedPushNotification();
-        dynamicLinkService.Register();
     }
 
     private void InitCommands()
     {
         NavigateToAuthPageCommand = ReactiveCommand.CreateFromTask(() => _navigationService.GoToAsync(NavigationPaths.ToAuthPage()));
         NavigateToCloudMessagingPageCommand = ReactiveCommand.CreateFromTask(() => _navigationService.GoToAsync(NavigationPaths.ToCloudMessagingPage()));
+        NavigateToAppCheckPageCommand = ReactiveCommand.CreateFromTask(() => _navigationService.GoToAsync(NavigationPaths.ToAppCheckPage()));
         NavigateToRemoteConfigPageCommand = ReactiveCommand.CreateFromTask(() => _navigationService.GoToAsync(NavigationPaths.ToRemoteConfigPage()));
         NavigateToStoragePageCommand = ReactiveCommand.CreateFromTask(() => _navigationService.GoToAsync(NavigationPaths.ToStoragePage()));
     }
@@ -43,6 +41,7 @@ public sealed class DashboardViewModel : ViewModelBase
 
     public ReactiveCommand<Unit, Unit> NavigateToAuthPageCommand { get; private set; }
     public ReactiveCommand<Unit, Unit> NavigateToCloudMessagingPageCommand { get; private set; }
+    public ReactiveCommand<Unit, Unit> NavigateToAppCheckPageCommand { get; private set; }
     public ReactiveCommand<Unit, Unit> NavigateToRemoteConfigPageCommand { get; private set; }
     public ReactiveCommand<Unit, Unit> NavigateToStoragePageCommand { get; private set; }
 }

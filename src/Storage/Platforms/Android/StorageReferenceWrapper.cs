@@ -1,7 +1,6 @@
 using Android.Gms.Extensions;
 using Firebase.Storage;
 using AndroidUri = Android.Net.Uri;
-using AndroidTask = Android.Gms.Tasks.Task;
 using File = Java.IO.File;
 using NativeStorageMetadata = Firebase.Storage.StorageMetadata;
 
@@ -21,21 +20,24 @@ public sealed class StorageReferenceWrapper : IStorageReference
         return _wrapped.Child(path).ToAbstract();
     }
 
-    public IStorageTransferTask PutBytes(byte[] bytes, IStorageMetadata metadata = null)
+    public IStorageTransferTask PutBytes(byte[] bytes, IStorageMetadata? metadata = null)
     {
         return metadata == null
             ? _wrapped.PutBytes(bytes).ToAbstract()
             : _wrapped.PutBytes(bytes, metadata.ToNative()).ToAbstract();
     }
 
-    public IStorageTransferTask PutFile(string filePath, IStorageMetadata metadata = null)
+    public IStorageTransferTask PutFile(string filePath, IStorageMetadata? metadata = null)
     {
+        var uri = AndroidUri.FromFile(new File(filePath))
+            ?? throw new InvalidOperationException("Could not create a file URI for the storage upload.");
+
         return metadata == null
-            ? _wrapped.PutFile(AndroidUri.FromFile(new File(filePath))).ToAbstract()
-            : _wrapped.PutFile(AndroidUri.FromFile(new File(filePath)), metadata.ToNative()).ToAbstract();
+            ? _wrapped.PutFile(uri).ToAbstract()
+            : _wrapped.PutFile(uri, metadata.ToNative()).ToAbstract();
     }
 
-    public IStorageTransferTask PutStream(Stream stream, IStorageMetadata metadata = null)
+    public IStorageTransferTask PutStream(Stream stream, IStorageMetadata? metadata = null)
     {
         return metadata == null
             ? _wrapped.PutStream(stream).ToAbstract()
@@ -55,7 +57,8 @@ public sealed class StorageReferenceWrapper : IStorageReference
     public async Task<string> GetDownloadUrlAsync()
     {
         var uri = await _wrapped.GetDownloadUrlAsync();
-        return uri.ToString();
+        return uri.ToString()
+            ?? throw new InvalidOperationException("Firebase Storage returned a null download URL string.");
     }
 
     public async Task<IStorageListResult> ListAsync(long maxResults)
@@ -70,12 +73,22 @@ public sealed class StorageReferenceWrapper : IStorageReference
 
     public async Task<Stream> GetStreamAsync(long maxSize)
     {
-        return (await _wrapped.GetStream(new StreamProcessor()).AsAsync<StreamDownloadTask.TaskSnapshot>()).Stream;
+        var bytes = await GetBytesAsync(maxSize);
+        return new MemoryStream(bytes, writable: false);
+    }
+
+    public async Task<byte[]> GetBytesAsync(long maxDownloadSizeBytes)
+    {
+        return (byte[]?) await _wrapped.GetBytes(maxDownloadSizeBytes)
+            ?? throw new InvalidOperationException("Firebase Storage returned null download data.");
     }
 
     public IStorageTransferTask DownloadFile(string destinationPath)
     {
-        return _wrapped.GetFile(AndroidUri.Parse(destinationPath)).ToAbstract();
+        var uri = AndroidUri.Parse(destinationPath)
+            ?? throw new InvalidOperationException("Could not parse the destination path as a URI.");
+
+        return _wrapped.GetFile(uri).ToAbstract();
     }
 
     public Task DeleteAsync()
@@ -83,7 +96,7 @@ public sealed class StorageReferenceWrapper : IStorageReference
         return _wrapped.DeleteAsync();
     }
 
-    public IStorageReference Parent => _wrapped.Parent?.ToAbstract();
+    public IStorageReference? Parent => _wrapped.Parent?.ToAbstract();
     public IStorageReference Root => _wrapped.Root.ToAbstract();
     public string Bucket => _wrapped.Bucket;
     public string Name => _wrapped.Name;

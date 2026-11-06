@@ -12,12 +12,12 @@ You can use [Firebase Authentication](https://firebase.google.com/docs/auth) to 
 
 - Follow the instructions for the [basic setup](https://github.com/TobiasBuchholz/Plugin.Firebase/blob/master/README.md#basic-setup)
 - Enable Authentication at your project in the [Firebase Console](https://console.firebase.google.com/).
-- Add the following lines of code after calling `CrossFirebase.Initialize()`:
+- When using [Plugin.Firebase.Auth.Google](https://www.nuget.org/packages/Plugin.Firebase.Auth.Google/), add the following lines of code after calling `CrossFirebase.Initialize()`:
 ```c#
 #if IOS
-  FirebaseAuthImplementation.Initialize();
+  FirebaseAuthGoogleImplementation.Initialize();
 #elif ANDROID
-  FirebaseAuthImplementation.Initialize("your-google-request-id-token");
+  FirebaseAuthGoogleImplementation.Initialize("your-google-request-id-token");
 #endif
 ```
 - The `googleRequestIdToken` can be accessed at the [Google API Console](https://console.developers.google.com/apis/credentials) (make sure to use the Client-ID of the Web client)
@@ -53,11 +53,16 @@ You can use [Firebase Authentication](https://firebase.google.com/docs/auth) to 
 
 ![firestore_poco.png](../art/project_settings_sha1.png)
 - Call `FirebaseAuthImplementation.HandleActivityResultAsync(requestCode, resultCode, data);` from `MainActivity.OnActivityResult(...)`
-- For more specific instructions take a look at the official [Firebase documentation](https://firebase.google.com/docs/auth/android/start?hl=en)
+- If you are on version 2.0.5 or later, add the following package to your project's `.csproj` file to prevent build errors:
+```xml
+  <PackageReference Include="Xamarin.AndroidX.Browser" Version="1.6.0.2" />
+```
+
+For more specific instructions take a look at the official [Firebase documentation](https://firebase.google.com/docs/auth/android/start?hl=en)
 
 ## Usage
 
-Take a look at the [documentation](https://github.com/xamarin/GoogleApisForiOSComponents/blob/master/docs/Firebase/Auth/GettingStarted.md) for the Xamarin.Firebase.iOS.Auth packages, because Plugin.Firebase's code is abstracted but still very similar.
+Take a look at the [documentation](https://github.com/AdamEssenmacher/GoogleApisForiOSComponents/blob/master/docs/Firebase/Auth/GettingStarted.md) for the AdamE.Firebase.iOS.Auth packages, because Plugin.Firebase's code is abstracted but still very similar.
 
 Since code should be documenting itself you can also take a look at the following classes:
 - [src/.../IFirebaseAuth.cs](https://github.com/TobiasBuchholz/Plugin.Firebase/blob/master/src/Shared/Auth/IFirebaseAuth.cs)
@@ -65,7 +70,132 @@ Since code should be documenting itself you can also take a look at the followin
 - [tests/.../AuthFixture.cs](https://github.com/TobiasBuchholz/Plugin.Firebase/blob/master/tests/Plugin.Firebase.IntegrationTests/Auth/AuthFixture.cs)
 - [sample/.../AuthService.cs](https://github.com/TobiasBuchholz/Plugin.Firebase/blob/master/sample/Playground/Common/Services/Auth/AuthService.cs)
 
+### Native provider credentials
+
+Provider SDKs create native Firebase credentials in platform-specific code. After you create a native `Firebase.Auth.AuthCredential`, pass it through the cross-platform Auth entry point to keep exception handling and user conversion consistent:
+
+```csharp
+using Plugin.Firebase.Auth;
+
+#if ANDROID
+var credential = Firebase.Auth.EmailAuthProvider.GetCredential(email, password);
+#elif IOS
+var credential = Firebase.Auth.EmailAuthProvider.GetCredentialFromPassword(email, password);
+#endif
+
+var user = await CrossFirebaseAuth.Current.SignInWithCredentialAsync(credential);
+```
+
+Use `LinkWithCredentialAsync(credential)` the same way when linking a provider credential to the current user.
+
+### Updating profile data
+
+Use `UserProfileChangeRequest.Builder` when updating profile fields. Fields omitted from the request remain unchanged, `null` clears a field, and `""` is passed through to Firebase as an explicit value.
+
+```csharp
+await CrossFirebaseAuth.Current.CurrentUser.UpdateProfileAsync(
+    new UserProfileChangeRequest.Builder()
+        .SetDisplayName("Bruce Wayne")
+        .SetPhotoUrl(null)
+        .Build()
+);
+```
+
+The legacy `UpdateProfileAsync(string? displayName = "", string? photoUrl = "")` overload treats `""` as omitted and is obsolete.
+
+## Language
+
+Set `LanguageCode = "fr"` (or any BCP-47 code) before invoking an Auth flow that triggers user-facing content such as password-reset emails, email-verification emails, or phone-auth SMS.
+Call `UseAppLanguage()` to reset to the app language.
+
+## User reauthentication and reload
+
+Call `CurrentUser.ReauthenticateWithEmailAndPasswordAsync(email, password)` before sensitive email/password user operations that require recent authentication.
+Call `CurrentUser.ReloadAsync()` to refresh that user from the backend. This is the preferred thin-wrapper API because Firebase exposes reload on the user object.
+
+For example, after sending an email-verification message, reload the user before reading `IsEmailVerified` again:
+
+```csharp
+var user = CrossFirebaseAuth.Current.CurrentUser;
+if(user is not null) {
+    await user.ReloadAsync();
+    var isVerified = user.IsEmailVerified;
+}
+```
+
+`ReloadCurrentUserAsync()` remains available for existing code, but is obsolete. New code should prefer `CurrentUser.ReloadAsync()` after checking `CurrentUser` is not `null`.
+
+## Error handling
+
+Native Firebase Auth failures are wrapped in `CrossPlatformFirebaseAuthException`. The wrapper preserves the original native exception in `InnerException` and exposes stable inspection fields for the native exception type, domain, code, and message.
+
+`FirebaseAuthErrorClassifier.TryClassify(...)` is an optional, best-effort helper for common failures such as invalid credentials, missing users, user collisions, weak passwords, recent-login requirements, and throttling. Call it explicitly in your app code when you want a simple cross-platform branch. When classification returns `null`, fall back to `NativeExceptionTypeName`, `NativeErrorDomain`, `NativeErrorCode`, `NativeErrorMessage`, or `InnerException`.
+
+```csharp
+public async Task<string?> SignInAsync(string email, string password)
+{
+    try {
+        await CrossFirebaseAuth.Current.SignInWithEmailAndPasswordAsync(email, password);
+        return null;
+    } catch(CrossPlatformFirebaseAuthException ex) {
+        return FirebaseAuthErrorClassifier.TryClassify(ex) switch {
+            FirebaseAuthFailure.InvalidCredentials => "Invalid email or password.",
+            FirebaseAuthFailure.UserNotFound => "No account exists for that email address.",
+            FirebaseAuthFailure.TooManyRequests => "Too many attempts. Try again later.",
+            _ => ex.NativeErrorMessage
+        };
+    }
+}
+```
+
+## Migration from v4
+
+Before v5, Auth failures were typically handled by catching `FirebaseAuthException` and inspecting its normalized `Reason` value.
+
+In v5:
+- Catch `CrossPlatformFirebaseAuthException`.
+- Call `FirebaseAuthErrorClassifier.TryClassify(ex)` only if you want a simple cross-platform classification.
+- Inspect `NativeExceptionTypeName`, `NativeErrorDomain`, `NativeErrorCode`, `NativeErrorMessage`, or `InnerException` when you need precise native details.
+- `SignOutAsync()` now follows the same unified exception model when the underlying native Auth SDK reports a failure.
+
 ## Release notes
+- Next
+  - Add email/password user reauthentication and user-level reload APIs.
+  - Mark `ReloadCurrentUserAsync()` obsolete; use `CurrentUser.ReloadAsync()` after checking `CurrentUser` is not `null`.
+  - Set `CrossPlatformFirebaseAuthException.NativeErrorCode` on Android in trimmed (Release) builds, where it was always `null`.
+- Version 5.0.1
+  - Fix for wrong Core project version dependency at nuget.org
+- Version 5.0.0
+  - Replace the normalized `FirebaseAuthException` / `FIRAuthError` model with `CrossPlatformFirebaseAuthException`.
+  - Preserve native Firebase Auth exceptions in `InnerException` and expose platform-specific metadata for inspection.
+  - Add `FirebaseAuthErrorClassifier` for best-effort, non-exhaustive classification of common Auth failures.
+  - Migrate by catching `CrossPlatformFirebaseAuthException`, optionally calling `FirebaseAuthErrorClassifier.TryClassify(ex)`, and using native metadata for precise handling.
+- Version 4.0.1
+  - Add `ReloadCurrentUserAsync()` to refresh the currently signed in user from the backend.
+  - Add `LanguageCode` and `UseAppLanguage()` to control the language used for Auth-generated user-facing flows (reset/verification emails, SMS).
+- Version 4.0.0
+  - Upgrade baseline to **.NET 9+**.
+  - Remove MAUI-specific dependencies (Auth remains usable from non-MAUI mobile .NET projects).
+    - Android initialization now requires an `ActivityLocator` function (e.g. `() => Platform.CurrentActivity`).
+  - Raise minimum platform versions (iOS 15+, Android 23+).
+  - Raise minimum Firebase SDK versions (iOS 12.5+, Android BoM 33.0+).
+  - Remove built-in Auth provider implementations (Facebook/Google/Apple); providers must be implemented directly via native SDKs per platform.
+- Version 3.1.2
+  - Fix NRE with Google Auth when cancelling sign in (#500)
+- Version 3.1.1
+  - Using AdamE.Firebase.iOS.* minimum version 11
+- Version 3.1.0
+  - Update to .net8
+- Version 3.0.0
+  - Swapped Xamarin.Firebase.iOS.Auth (native SDK 8.10.0) for AdamE.Firebase.iOS.Auth (native SDK 10.24.0)
+- Version 2.0.7
+  - Added AddAuthStateListener to FirebaseAuth (PR #246)
+- Version 2.0.6
+  - Fix dates in android AuthTokenResultWrapper (issue #244)
+- Version 2.0.5
+  - Bump up Xamarin.Firebase.Auth from 121.0.8 to 122.2.0 (issue #131)
+- Version 2.0.4
+  - Separating Auth.Google into its own package (PR #210)
 - Version 2.0.3
   - Return `FirebaseUser` in `FirebaseAuthImplementation.CreateUserAsync(email, password)` method (issue #183)
 - Version 2.0.2

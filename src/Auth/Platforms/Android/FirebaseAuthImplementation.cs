@@ -1,43 +1,25 @@
-using Android.Content;
 using Android.Gms.Extensions;
-using AndroidX.Fragment.App;
 using Firebase.Auth;
-using Microsoft.Maui.ApplicationModel;
 using Plugin.Firebase.Auth.Platforms.Android.Email;
-using Plugin.Firebase.Auth.Platforms.Android.Google;
-using Plugin.Firebase.Auth.Platforms.Android.PhoneNumber;
 using Plugin.Firebase.Auth.Platforms.Android.Extensions;
+using Plugin.Firebase.Auth.Platforms.Android.PhoneNumber;
 using Plugin.Firebase.Core;
 using Plugin.Firebase.Core.Exceptions;
-using Activity = Android.App.Activity;
+using Plugin.Firebase.Core.Platforms.Android;
 using CrossActionCodeSettings = Plugin.Firebase.Auth.ActionCodeSettings;
-using CrossFirebaseAuthException = Plugin.Firebase.Core.Exceptions.FirebaseAuthException;
 
 namespace Plugin.Firebase.Auth;
 
 public sealed class FirebaseAuthImplementation : DisposableBase, IFirebaseAuth
 {
-    public static void Initialize(string googleRequestIdToken)
-    {
-        _googleRequestIdToken = googleRequestIdToken;
-    }
-
-    public static Task HandleActivityResultAsync(int requestCode, Result resultCode, Intent data)
-    {
-        return _googleAuth.Value.HandleActivityResultAsync(requestCode, resultCode, data);
-    }
-
     private readonly FirebaseAuth _firebaseAuth;
     private readonly EmailAuth _emailAuth;
-    private static Lazy<GoogleAuth> _googleAuth;
     private readonly PhoneNumberAuth _phoneNumberAuth;
-    private static string _googleRequestIdToken;
 
     public FirebaseAuthImplementation()
     {
         _firebaseAuth = FirebaseAuth.Instance;
         _emailAuth = new EmailAuth();
-        _googleAuth = new Lazy<GoogleAuth>(() => new GoogleAuth(Activity, _googleRequestIdToken));
         _phoneNumberAuth = new PhoneNumberAuth();
 
         // apply the default app language for sending emails 
@@ -46,51 +28,45 @@ public sealed class FirebaseAuthImplementation : DisposableBase, IFirebaseAuth
 
     public async Task VerifyPhoneNumberAsync(string phoneNumber)
     {
-        try {
-            await _phoneNumberAuth.VerifyPhoneNumberAsync(Activity, phoneNumber);
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
+        var activityLocator = CrossFirebase.ActivityLocator;
+        if(activityLocator is null) {
+            throw new InvalidOperationException("ActivityLocator is null.");
         }
-    }
+        var activity = activityLocator();
+        if(activity is null) {
+            throw new InvalidOperationException("Activity is null.");
+        }
 
-    private static CrossFirebaseAuthException GetFirebaseAuthException(Exception ex)
-    {
-        return ex switch {
-            FirebaseAuthEmailException => new CrossFirebaseAuthException(FIRAuthError.InvalidEmail, ex.Message),
-            FirebaseAuthInvalidUserException => new CrossFirebaseAuthException(FIRAuthError.UserNotFound, ex.Message),
-            FirebaseAuthWeakPasswordException => new CrossFirebaseAuthException(FIRAuthError.WeakPassword, ex.Message),
-            FirebaseAuthInvalidCredentialsException { ErrorCode: "ERROR_WRONG_PASSWORD" } => new CrossFirebaseAuthException(FIRAuthError.WrongPassword, ex.Message),
-            FirebaseAuthInvalidCredentialsException => new CrossFirebaseAuthException(FIRAuthError.InvalidCredential, ex.Message),
-            FirebaseAuthUserCollisionException { ErrorCode: "ERROR_EMAIL_ALREADY_IN_USE" } => new CrossFirebaseAuthException(FIRAuthError.EmailAlreadyInUse, ex.Message),
-            FirebaseAuthUserCollisionException { ErrorCode: "ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL" } => new CrossFirebaseAuthException(FIRAuthError.AccountExistsWithDifferentCredential, ex.Message),
-            _ => new CrossFirebaseAuthException(FIRAuthError.Undefined, ex.Message)
-        };
+        await FirebaseAuthExceptionFactory.Wrap(() => _phoneNumberAuth.VerifyPhoneNumberAsync(activity, phoneNumber));
     }
 
     public async Task<IFirebaseUser> SignInWithCustomTokenAsync(string token)
     {
-        try {
-            var authResult = await _firebaseAuth.SignInWithCustomTokenAsync(token);
-            return authResult.User.ToAbstract(authResult.AdditionalUserInfo);
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
-        }
+        var authResult = await FirebaseAuthExceptionFactory.Wrap(
+            () => _firebaseAuth.SignInWithCustomTokenAsync(token)
+        );
+        return FirebaseAuthInvariant.EnsureNotNull(
+            authResult.User,
+            "Firebase Auth returned a null user after sign-in with a custom token."
+        ).ToAbstract(authResult.AdditionalUserInfo);
     }
 
     public async Task<IFirebaseUser> SignInWithPhoneNumberVerificationCodeAsync(string verificationCode)
     {
-        try {
-            var credential = await _phoneNumberAuth.GetCredentialAsync(verificationCode);
-            return await SignInWithCredentialAsync(credential);
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
-        }
+        var credential = await _phoneNumberAuth.GetCredentialAsync(verificationCode);
+        return await SignInWithCredentialAsync(credential);
     }
 
-    private async Task<IFirebaseUser> SignInWithCredentialAsync(AuthCredential credential)
+    /// <inheritdoc/>
+    public async Task<IFirebaseUser> SignInWithCredentialAsync(AuthCredential credential)
     {
-        var authResult = await _firebaseAuth.SignInWithCredentialAsync(credential);
-        return authResult.User.ToAbstract(authResult.AdditionalUserInfo);
+        var authResult = await FirebaseAuthExceptionFactory.Wrap(
+            () => _firebaseAuth.SignInWithCredentialAsync(credential)
+        );
+        return FirebaseAuthInvariant.EnsureNotNull(
+            authResult.User,
+            "Firebase Auth returned a null user after sign-in with a credential."
+        ).ToAbstract(authResult.AdditionalUserInfo);
     }
 
     public async Task<IFirebaseUser> SignInWithEmailAndPasswordAsync(string email, string password, bool createsUserAutomatically = true)
@@ -98,121 +74,96 @@ public sealed class FirebaseAuthImplementation : DisposableBase, IFirebaseAuth
         try {
             var credential = await _emailAuth.GetCredentialAsync(email, password);
             return await SignInWithCredentialAsync(credential);
-        } catch(Exception e) {
-            if(e is FirebaseAuthInvalidUserException && createsUserAutomatically) {
+        } catch(CrossPlatformFirebaseAuthException e)
+            when(createsUserAutomatically && ShouldAttemptCreateUser(e)) {
+            // Firebase Android SDK with Email Enumeration Protection enabled (default)
+            // may return FirebaseAuthInvalidCredentialsException instead of
+            // FirebaseAuthInvalidUserException when the user does not exist.
+            // We attempt user creation for both; if the user actually exists
+            // (wrong password scenario), creation fails and we re-throw the original error.
+            try {
                 return await CreateUserAsync(email, password);
+            } catch(CrossPlatformFirebaseAuthException) {
+                throw e;
             }
-            throw GetFirebaseAuthException(e);
         }
     }
 
-    public async Task<IFirebaseUser> CreateUserAsync(string email, string password)
+    public Task<IFirebaseUser> CreateUserAsync(string email, string password)
     {
-        try {
-            return await _emailAuth.CreateUserAsync(email, password);
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
-        }
+        return FirebaseAuthExceptionFactory.Wrap(() => _emailAuth.CreateUserAsync(email, password));
     }
 
     public async Task<IFirebaseUser> SignInWithEmailLinkAsync(string email, string link)
     {
-        try {
+        await FirebaseAuthExceptionFactory.Wrap(async () => {
             await _firebaseAuth.SignInWithEmailLink(email, link);
-            return _firebaseAuth.CurrentUser.ToAbstract();
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
-        }
-    }
-
-    public async Task<IFirebaseUser> SignInWithGoogleAsync()
-    {
-        try {
-            var credential = await _googleAuth.Value.GetCredentialAsync(FragmentActivity);
-            return await SignInWithCredentialAsync(credential);
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
-        }
-    }
-
-    public Task<IFirebaseUser> SignInWithAppleAsync()
-    {
-        throw new PlatformNotSupportedException();
+        });
+        return FirebaseAuthInvariant.EnsureNotNull(
+            _firebaseAuth.CurrentUser,
+            "Firebase Auth returned a null current user after email-link sign-in."
+        ).ToAbstract();
     }
 
     public async Task<IFirebaseUser> SignInAnonymouslyAsync()
     {
-        try {
-            var authResult = await _firebaseAuth.SignInAnonymouslyAsync();
-            return authResult.User.ToAbstract(authResult.AdditionalUserInfo);
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
-        }
+        var authResult = await FirebaseAuthExceptionFactory.Wrap(
+            () => _firebaseAuth.SignInAnonymouslyAsync()
+        );
+        return FirebaseAuthInvariant.EnsureNotNull(
+            authResult.User,
+            "Firebase Auth returned a null user after anonymous sign-in."
+        ).ToAbstract(authResult.AdditionalUserInfo);
     }
 
     public async Task<IFirebaseUser> LinkWithPhoneNumberVerificationCodeAsync(string verificationCode)
     {
-        try {
-            var credential = await _phoneNumberAuth.GetCredentialAsync(verificationCode);
-            return await LinkWithCredentialAsync(credential);
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
-        }
+        var credential = await _phoneNumberAuth.GetCredentialAsync(verificationCode);
+        return await LinkWithCredentialAsync(credential);
     }
 
-    private async Task<IFirebaseUser> LinkWithCredentialAsync(AuthCredential credential)
+    /// <inheritdoc/>
+    public async Task<IFirebaseUser> LinkWithCredentialAsync(AuthCredential credential)
     {
-        var authResult = await _firebaseAuth.CurrentUser.LinkWithCredentialAsync(credential);
-        return authResult.User.ToAbstract(authResult.AdditionalUserInfo);
+        var currentUser = _firebaseAuth.CurrentUser;
+        if(currentUser is null) {
+            throw new FirebaseException("CurrentUser is null. You need to be logged in to use this feature.");
+        }
+
+        var authResult = await FirebaseAuthExceptionFactory.Wrap(
+            () => currentUser.LinkWithCredentialAsync(credential)
+        );
+        return FirebaseAuthInvariant.EnsureNotNull(
+            authResult.User,
+            "Firebase Auth returned a null user after linking a credential."
+        ).ToAbstract(authResult.AdditionalUserInfo);
     }
 
     public async Task<IFirebaseUser> LinkWithEmailAndPasswordAsync(string email, string password)
     {
-        try {
-            var credential = await _emailAuth.GetCredentialAsync(email, password);
-            return await LinkWithCredentialAsync(credential);
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
-        }
-    }
-
-    public async Task<IFirebaseUser> LinkWithGoogleAsync()
-    {
-        try {
-            var credential = await _googleAuth.Value.GetCredentialAsync(FragmentActivity);
-            return await LinkWithCredentialAsync(credential);
-        } catch(Exception e) {
-            await _googleAuth.Value.SignOutAsync();
-            throw GetFirebaseAuthException(e);
-        }
-    }
-
-    public async Task<string[]> FetchSignInMethodsAsync(string email)
-    {
-        try {
-            var result = await _firebaseAuth.FetchSignInMethodsForEmail(email).AsAsync<ISignInMethodQueryResult>();
-            return result?.SignInMethods?.ToArray();
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
-        }
+        var credential = await _emailAuth.GetCredentialAsync(email, password);
+        return await LinkWithCredentialAsync(credential);
     }
 
     public async Task SendSignInLink(string toEmail, CrossActionCodeSettings actionCodeSettings)
     {
-        try {
-            await _firebaseAuth.SendSignInLinkToEmail(toEmail, actionCodeSettings.ToNative());
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
+        var nativeActionCodeSettings = actionCodeSettings.ToNative();
+        if(nativeActionCodeSettings is null) {
+            throw new InvalidOperationException("ActionCodeSettings.ToNative() returned null.");
         }
+
+        await FirebaseAuthExceptionFactory.Wrap(async () => {
+            await _firebaseAuth.SendSignInLinkToEmail(toEmail, nativeActionCodeSettings);
+        });
     }
 
-    public async Task SignOutAsync()
+    public Task SignOutAsync()
     {
         try {
             _firebaseAuth.SignOut();
-            await _googleAuth.Value.SignOutAsync();
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
+            return Task.CompletedTask;
+        } catch(Exception e) when(FirebaseAuthExceptionFactory.IsNativeAuthException(e)) {
+            throw FirebaseAuthExceptionFactory.Create(e);
         }
     }
 
@@ -220,23 +171,51 @@ public sealed class FirebaseAuthImplementation : DisposableBase, IFirebaseAuth
     {
         try {
             return _firebaseAuth.IsSignInWithEmailLink(link);
-        } catch(Exception e) {
-            throw GetFirebaseAuthException(e);
+        } catch(Exception e) when(FirebaseAuthExceptionFactory.IsNativeAuthException(e)) {
+            throw FirebaseAuthExceptionFactory.Create(e);
         }
     }
 
     public Task SendPasswordResetEmailAsync()
     {
-        if(_firebaseAuth.CurrentUser == null) {
+        var currentUser = _firebaseAuth.CurrentUser;
+        if(currentUser is null) {
             throw new FirebaseException("CurrentUser is null. You need to be logged in to use this feature.");
-        } else {
-            return _firebaseAuth.SendPasswordResetEmailAsync(_firebaseAuth.CurrentUser.Email);
         }
+
+        var email = currentUser.Email;
+        if(email is null) {
+            throw new FirebaseException("CurrentUser.Email is null.");
+        }
+
+        return FirebaseAuthExceptionFactory.Wrap(() => _firebaseAuth.SendPasswordResetEmailAsync(email));
     }
 
     public Task SendPasswordResetEmailAsync(string email)
     {
-        return _firebaseAuth.SendPasswordResetEmailAsync(email);
+        return FirebaseAuthExceptionFactory.Wrap(() => _firebaseAuth.SendPasswordResetEmailAsync(email));
+    }
+
+    [Obsolete("Use CurrentUser.ReloadAsync() after checking CurrentUser is not null.")]
+    public async Task ReloadCurrentUserAsync()
+    {
+        var currentUser = _firebaseAuth.CurrentUser;
+        if(currentUser is null) {
+            throw new FirebaseException(
+                "CurrentUser is null. You need to be logged in to use this feature."
+            );
+        }
+
+        await FirebaseAuthExceptionFactory.Wrap(() => currentUser.ReloadAsync());
+    }
+
+    public string? LanguageCode {
+        set => _firebaseAuth.LanguageCode = value;
+    }
+
+    public void UseAppLanguage()
+    {
+        _firebaseAuth.UseAppLanguage();
     }
 
     public void UseEmulator(string host, int port)
@@ -244,14 +223,34 @@ public sealed class FirebaseAuthImplementation : DisposableBase, IFirebaseAuth
         _firebaseAuth.UseEmulator(host, port);
     }
 
-    private static FragmentActivity FragmentActivity =>
-        Activity as FragmentActivity ?? throw new NullReferenceException($"Current Activity is either null or not of type {nameof(FragmentActivity)}, which is mandatory for sign in with Google");
+    public IDisposable AddAuthStateListener(Action<IFirebaseAuth> listener)
+    {
+        var authStateListener = new AuthStateListener(_ => listener.Invoke(this));
+        _firebaseAuth.AddAuthStateListener(authStateListener);
+        return new DisposableWithAction(() => _firebaseAuth.RemoveAuthStateListener(authStateListener));
+    }
 
-    private static Activity Activity =>
-        Platform.CurrentActivity ?? throw new NullReferenceException("Platform.CurrentActivity is null");
+    public IFirebaseUser? CurrentUser => _firebaseAuth.CurrentUser?.ToAbstract();
 
-    private static Context AppContext =>
-        Platform.AppContext ?? throw new NullReferenceException("Platform.AppContext is null");
+    private static bool ShouldAttemptCreateUser(CrossPlatformFirebaseAuthException exception)
+    {
+        return exception.NativeExceptionTypeName is
+            FirebaseAuthAndroidExceptionTypeNames.InvalidUserException or
+            FirebaseAuthAndroidExceptionTypeNames.InvalidCredentialsException;
+    }
 
-    public IFirebaseUser CurrentUser => _firebaseAuth.CurrentUser?.ToAbstract();
+    private class AuthStateListener : Java.Lang.Object, FirebaseAuth.IAuthStateListener
+    {
+        private readonly Action<FirebaseAuth> _onAuthStateChanged;
+
+        public AuthStateListener(Action<FirebaseAuth> onAuthStateChanged)
+        {
+            _onAuthStateChanged = onAuthStateChanged;
+        }
+
+        public void OnAuthStateChanged(FirebaseAuth auth)
+        {
+            _onAuthStateChanged.Invoke(auth);
+        }
+    }
 }

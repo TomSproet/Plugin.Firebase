@@ -1,10 +1,16 @@
 namespace Plugin.Firebase.Firestore;
 
+/// <summary>
+/// Cross-platform entry point for Firebase Firestore.
+/// </summary>
 public sealed class CrossFirebaseFirestore
 {
-    private static Lazy<IFirebaseFirestore> _implementation = new Lazy<IFirebaseFirestore>(CreateInstance, System.Threading.LazyThreadSafetyMode.PublicationOnly);
+    private static Lazy<IFirebaseFirestore?> _implementation = new Lazy<IFirebaseFirestore?>(
+        CreateInstance,
+        LazyThreadSafetyMode.PublicationOnly
+    );
 
-    private static IFirebaseFirestore CreateInstance()
+    private static IFirebaseFirestore? CreateInstance()
     {
 #if IOS || ANDROID
         return new FirebaseFirestoreImplementation();
@@ -34,16 +40,21 @@ public sealed class CrossFirebaseFirestore
     }
 
     private static Exception NotImplementedInReferenceAssembly() =>
-        new NotImplementedException("This functionality is not implemented in the portable version of this assembly. You should reference the NuGet package from your main application project in order to reference the platform-specific implementation.");
+        new NotImplementedException(
+            "This functionality is not implemented in the portable version of this assembly. You should reference the NuGet package from your main application project in order to reference the platform-specific implementation."
+        );
 
     /// <summary>
-    /// Dispose of everything 
+    /// Dispose of everything
     /// </summary>
     public static void Dispose()
     {
         if(_implementation != null && _implementation.IsValueCreated) {
-            _implementation.Value.Dispose();
-            _implementation = new Lazy<IFirebaseFirestore>(CreateInstance, System.Threading.LazyThreadSafetyMode.PublicationOnly);
+            _implementation.Value?.Dispose();
+            _implementation = new Lazy<IFirebaseFirestore?>(
+                CreateInstance,
+                LazyThreadSafetyMode.PublicationOnly
+            );
         }
     }
 }

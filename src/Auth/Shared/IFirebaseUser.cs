@@ -21,6 +21,18 @@ public interface IFirebaseUser
     Task UpdatePasswordAsync(string password);
 
     /// <summary>
+    /// Reauthenticates the user with an email address and password.
+    /// </summary>
+    /// <param name="email">The user’s email address.</param>
+    /// <param name="password">The user’s password.</param>
+    Task ReauthenticateWithEmailAndPasswordAsync(string email, string password);
+
+    /// <summary>
+    /// Reloads the user from the backend.
+    /// </summary>
+    Task ReloadAsync();
+
+    /// <summary>
     /// Updates the phone number for the user. On success, the cached user profile data is updated.
     /// </summary>
     /// <param name="verificationId">A valid verificationId retrieved by calling VerifyPhoneNumber().</param>
@@ -28,17 +40,22 @@ public interface IFirebaseUser
     Task UpdatePhoneNumberAsync(string verificationId, string smsCode);
 
     /// <summary>
-    /// Change the user’s profile data.
+    /// Changes the user's profile data.
     /// </summary>
-    /// <param name="displayName">The user’s display name.</param>
-    /// <param name="photoUrl">The user’s photo URL.</param>
-    Task UpdateProfileAsync(string displayName = "", string photoUrl = "");
+    /// <remarks>
+    /// This legacy overload treats <c>""</c> as omitted. Use the <see cref="UserProfileChangeRequest"/>
+    /// to pass <c>""</c> through as a value.
+    /// </remarks>
+    /// <param name="displayName">The user's display name.</param>
+    /// <param name="photoUrl">The user's photo URL.</param>
+    [Obsolete("Use UpdateProfileAsync(UserProfileChangeRequest request) to distinguish omitted, null, and empty string values.")]
+    Task UpdateProfileAsync(string? displayName = "", string? photoUrl = "");
 
     /// <summary>
     /// Initiates email verification for the user.
     /// </summary>
     /// <param name="actionCodeSettings">An <c>ActionCodeSettings</c> object containing settings related to handling action codes.</param>
-    Task SendEmailVerificationAsync(ActionCodeSettings actionCodeSettings = null);
+    Task SendEmailVerificationAsync(ActionCodeSettings? actionCodeSettings = null);
 
     /// <summary>
     /// Disassociates a user account from a third-party identity provider with this user.
@@ -61,24 +78,24 @@ public interface IFirebaseUser
     Task<IAuthTokenResult> GetIdTokenResultAsync(bool forceRefresh = false);
 
     /// <summary>
-    /// Returns a string used to uniquely identify your user in your Firebase project's user database. 
+    /// Returns a string used to uniquely identify your user in your Firebase project's user database.
     /// </summary>
     string Uid { get; }
 
     /// <summary>
-    /// Returns the main display name of this user from the Firebase project's user database. 
+    /// Returns the main display name of this user from the Firebase project's user database.
     /// </summary>
-    string DisplayName { get; }
+    string? DisplayName { get; }
 
     /// <summary>
     /// Returns the main email address of the user, as stored in the Firebase project's user database.
     /// </summary>
-    string Email { get; }
+    string? Email { get; }
 
     /// <summary>
-    /// Returns the URL of this user's main profile picture, as stored in the Firebase project's user database. 
+    /// Returns the URL of this user's main profile picture, as stored in the Firebase project's user database.
     /// </summary>
-    string PhotoUrl { get; }
+    string? PhotoUrl { get; }
 
     /// <summary>
     /// Always returns <c>FirebaseAuthProvider.PROVIDER_ID</c>.
@@ -98,10 +115,10 @@ public interface IFirebaseUser
     /// <summary>
     /// Profile data for each identity provider, if any. This data is cached on sign-in and updated when linking or unlinking.
     /// </summary>
-    IEnumerable<ProviderInfo> ProviderInfos { get; }
+    IEnumerable<ProviderInfo>? ProviderInfos { get; }
 
     /// <summary>
     /// Metadata associated with the Firebase user in question.
     /// </summary>
-    UserMetadata Metadata { get; }
+    UserMetadata? Metadata { get; }
 }

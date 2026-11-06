@@ -6,6 +6,13 @@ namespace Plugin.Firebase.Firestore;
 public interface IFirebaseFirestore : IDisposable
 {
     /// <summary>
+    /// Creates and returns a new <c>IQuery</c> object that includes all documents in the database that are contained.
+    /// </summary>
+    /// <param name="collectionId">The collectionId of the collection or subcollection.</param>
+    /// <returns></returns>
+    IQuery GetCollectionGroup(string collectionId);
+    
+    /// <summary>
     /// Gets a <c>ICollectionReference</c> object referring to the collection at the specified path within the database.
     /// </summary>
     /// <param name="collectionPath">The slash-separated path of the collection for which to get a <c>ICollectionReference</c>.</param>
@@ -22,10 +29,17 @@ public interface IFirebaseFirestore : IDisposable
     /// <summary>
     /// Executes the given updateBlock and then attempts to commit the changes applied within an atomic transaction.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="updateFunc"/> may run more than once when the transaction is retried, so it should not change state
+    /// outside the transaction. Throwing from <paramref name="updateFunc"/> aborts the transaction without committing any of
+    /// its writes and faults the returned task. The exception type differs by platform: iOS throws a <c>FirebaseException</c>
+    /// and Android surfaces the native task's <c>RuntimeException</c>. On both, the exception thrown by
+    /// <paramref name="updateFunc"/> is the <see cref="Exception.InnerException"/>.
+    /// </remarks>
     /// <param name="updateFunc">The func to execute within the transaction context.</param>
     /// <typeparam name="TResult">The type of the result returned by updateFunc.</typeparam>
     /// <returns></returns>
-    Task<TResult> RunTransactionAsync<TResult>(Func<ITransaction, TResult> updateFunc);
+    Task<TResult?> RunTransactionAsync<TResult>(Func<ITransaction, TResult> updateFunc);
 
     /// <summary>
     /// Creates a write batch, used for performing multiple writes as a single atomic operation.

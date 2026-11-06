@@ -11,7 +11,14 @@ public interface IDocumentSnapshot<out T> : IDocumentSnapshot
     /// <summary>
     /// Retrieves all fields in the document as the given generic type. Returns null if the document doesn't exist.
     /// </summary>
-    T Data { get; }
+    /// <remarks>
+    /// The document is converted to <typeparamref name="T"/> the first time this property is read. When
+    /// <typeparamref name="T"/> is a reference type, later reads of the same snapshot return that instance, so changes made
+    /// to it stay visible through this snapshot. They are not written to Firestore. When <typeparamref name="T"/> is a value
+    /// type, each read returns a copy of the converted value. A failed conversion isn't kept, so the next read converts
+    /// again.
+    /// </remarks>
+    T? Data { get; }
 
     /// <summary>
     /// Metadata about this snapshot concerning its source and if it has local modifications.
@@ -24,6 +31,7 @@ public interface IDocumentSnapshot<out T> : IDocumentSnapshot
     IDocumentReference Reference { get; }
 }
 
-public interface IDocumentSnapshot
-{
-}
+/// <summary>
+/// Base interface for document snapshots.
+/// </summary>
+public interface IDocumentSnapshot { }

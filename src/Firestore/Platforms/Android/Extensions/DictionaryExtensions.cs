@@ -5,24 +5,26 @@ using Java.Util;
 using IMap = Java.Util.IMap;
 using IList = System.Collections.IList;
 using NativeFieldValue = Firebase.Firestore.FieldValue;
+using NativeGeoPoint = Firebase.Firestore.GeoPoint;
 
 namespace Plugin.Firebase.Firestore.Platforms.Android.Extensions;
 
 public static class DictionaryExtensions
 {
-    public static HashMap ToHashMap(this IDictionary<object, object> dictionary)
+    public static HashMap ToHashMap(this IDictionary<object, object?> dictionary)
     {
         var map = new HashMap();
         dictionary.ToList().ForEach(x => map.Put(x.Key, x.Value));
         return map;
     }
 
-    public static HashMap ToHashMap(this IDictionary<string, object> dictionary)
+    public static HashMap ToHashMap(this IDictionary<string, object?> dictionary)
     {
         var hashMap = new HashMap();
         dictionary.ToList().ForEach(x => {
             if(x.Value is JsonObject jsonValue) {
-                hashMap.Put(x.Key, jsonValue.Deserialize<Dictionary<string, object>>().ToHashMap());
+                var deserialized = jsonValue.Deserialize<Dictionary<string, object?>>();
+                hashMap.Put(x.Key, (deserialized ?? new Dictionary<string, object?>()).ToHashMap());
             } else {
                 hashMap.Put(x.Key, x.Value);
             }
@@ -30,7 +32,14 @@ public static class DictionaryExtensions
         return hashMap;
     }
 
-    private static void Put(this IMap @this, object key, object value)
+    public static HashMap ToHashMap(this IEnumerable<(object, object?)> tuples)
+    {
+        var dict = new Dictionary<object, object?>();
+        tuples.ToList().ForEach(x => dict.Add(x.Item1, x.Item2));
+        return dict.ToHashMap();
+    }
+
+    private static void Put(this IMap @this, object key, object? value)
     {
         switch(value) {
             case bool x:
@@ -64,10 +73,10 @@ public static class DictionaryExtensions
                 @this.Put(key.ToString(), x.ToJavaList());
                 break;
             case DateTime x:
-                @this.Put(key.ToString(), x.ToJavaDate());
+                @this.Put(key.ToString(), x.ToTimestamp());
                 break;
             case DateTimeOffset x:
-                @this.Put(key.ToString(), x.ToJavaDate());
+                @this.Put(key.ToString(), x.ToTimestamp());
                 break;
             case IFirestoreObject x:
                 @this.Put(key.ToString(), x.ToJavaObject());
@@ -75,8 +84,14 @@ public static class DictionaryExtensions
             case IDictionary x:
                 @this.Put(key.ToString(), x.ToHashMapFromNonGenericDict());
                 break;
+            case FieldValue x:
+                @this.Put(key.ToString(), x.ToNative());
+                break;
             case IDocumentReference x:
                 @this.Put(key.ToString(), x.ToJavaObject());
+                break;
+            case GeoPoint x:
+                @this.Put(key.ToString(), new NativeGeoPoint(x.Latitude, x.Longitude));
                 break;
             default:
                 if(value == null) {
@@ -99,6 +114,15 @@ public static class DictionaryExtensions
 
     public static HashMap ToHashMap(this object @this)
     {
+        switch(@this) {
+            case IDictionary<string, object?> stringDictionary:
+                return stringDictionary.ToHashMap();
+            case IDictionary<object, object?> objectDictionary:
+                return objectDictionary.ToHashMap();
+            case IDictionary dictionary:
+                return dictionary.ToHashMapFromNonGenericDict();
+        }
+
         var map = new HashMap();
         var properties = @this.GetType().GetProperties();
         foreach(var property in properties) {
@@ -117,24 +141,24 @@ public static class DictionaryExtensions
         return map;
     }
 
-    public static IDictionary<string, Java.Lang.Object> ToJavaObjectDictionary(this IEnumerable<(string, object)> tuples)
+    public static IDictionary<string, Java.Lang.Object?> ToJavaObjectDictionary(this IEnumerable<(string, object?)> tuples)
     {
-        var dict = new Dictionary<string, object>();
+        var dict = new Dictionary<string, object?>();
         tuples.ToList().ForEach(x => dict.Add(x.Item1, x.Item2));
         return dict.ToJavaObjectDictionary();
     }
 
-    public static IDictionary<string, Java.Lang.Object> ToJavaObjectDictionary(this IDictionary<string, object> dictionary)
+    public static IDictionary<string, Java.Lang.Object?> ToJavaObjectDictionary(this IDictionary<string, object?> dictionary)
     {
-        var result = new Dictionary<string, Java.Lang.Object>();
+        var result = new Dictionary<string, Java.Lang.Object?>();
         dictionary.ToList().ForEach(x => result.Add(x.Key, x.Value.ToJavaObject()));
         return result;
     }
 
-    public static IDictionary<string, Java.Lang.Object> ToJavaObjectDictionary(this IDictionary<object, object> @this)
+    public static IDictionary<string, Java.Lang.Object?> ToJavaObjectDictionary(this IDictionary<object, object?> @this)
     {
-        var dict = new Dictionary<string, object>();
-        @this.ToList().ForEach(x => dict.Add(x.Key.ToString(), x.Value));
+        var dict = new Dictionary<string, object?>();
+        @this.ToList().ForEach(x => dict.Add(x.Key.ToString() ?? throw new ArgumentException("Dictionary contains a null key."), x.Value));
         return dict.ToJavaObjectDictionary();
     }
 }
